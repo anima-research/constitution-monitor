@@ -365,18 +365,18 @@
                 <p class="hint">Discord message URL for the last message in range</p>
             </div>
 
-            <div class="or-divider">Choose one of the following:</div>
+            <div class="or-divider">Optional: Define range and/or max messages</div>
 
             <div class="input-row">
                 <div class="input-group">
                     <label for="firstUrl">First Message URL (optional)</label>
                     <input type="text" id="firstUrl" placeholder="https://discord.com/channels/...">
-                    <p class="hint">For exact range</p>
+                    <p class="hint">Start of range (use with message count for long threads)</p>
                 </div>
                 <div class="input-group">
                     <label for="messageCount">Message Count (optional)</label>
                     <input type="number" id="messageCount" placeholder="50" min="1" max="1000">
-                    <p class="hint">Fetch N messages before 'last'</p>
+                    <p class="hint">Max messages to fetch (default: 50)</p>
                 </div>
             </div>
 
@@ -491,7 +491,8 @@
             const body = { last: lastUrl };
             if (firstUrl) {
                 body.first = firstUrl;
-            } else if (messageCount) {
+            }
+            if (messageCount) {
                 body.recencyWindow = { messages: parseInt(messageCount) };
             }
 
