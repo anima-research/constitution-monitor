@@ -265,6 +265,18 @@
             color: white;
         }
 
+        .download-btn {
+            background: #43b581;
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+        }
+
+        .download-btn:hover {
+            background: #3ca374;
+        }
+
         .user-card {
             display: flex;
             align-items: center;
@@ -387,6 +399,11 @@
                 <div class="tabs">
                     <button class="tab active" onclick="showTab('preview')">Preview</button>
                     <button class="tab" onclick="showTab('json')">Raw JSON</button>
+                    <div style="margin-left: auto; display: flex; gap: 8px;">
+                        <button class="download-btn" onclick="downloadJSON()">Download JSON</button>
+                        <button class="download-btn" onclick="downloadText()">Download Text</button>
+                        <button class="download-btn" onclick="copyToClipboard()">Copy JSON</button>
+                    </div>
                 </div>
 
                 <div id="metadataSection"></div>
@@ -420,6 +437,9 @@
     </div>
 
     <script>
+        // Store export data for downloads
+        let lastExportData = null;
+
         // Save/load token from localStorage
         document.addEventListener('DOMContentLoaded', () => {
             const savedToken = localStorage.getItem('discord_api_token');
@@ -523,6 +543,7 @@
         }
 
         function displayExportResults(data) {
+            lastExportData = data;
             document.getElementById('exportResults').style.display = 'block';
 
             // Metadata
@@ -636,6 +657,61 @@
                 </div>
                 <div class="json-output" style="margin-top: 16px;">${JSON.stringify(data, null, 2)}</div>
             `;
+        }
+
+        function downloadJSON() {
+            if (!lastExportData) return;
+            const meta = lastExportData.metadata || {};
+            const filename = `discord-export-${meta.channelName || 'messages'}-${Date.now()}.json`;
+            downloadFile(JSON.stringify(lastExportData, null, 2), filename, 'application/json');
+        }
+
+        function downloadText() {
+            if (!lastExportData) return;
+            const meta = lastExportData.metadata || {};
+            const messages = lastExportData.messages || [];
+
+            let text = `Discord Export: #${meta.channelName || 'unknown'} in ${meta.guildName || 'unknown'}\n`;
+            text += `Exported: ${new Date().toISOString()}\n`;
+            text += `Messages: ${messages.length}\n`;
+            text += '='.repeat(60) + '\n\n';
+
+            messages.forEach(msg => {
+                const author = msg.author || {};
+                const time = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+                const botTag = author.bot ? ' [BOT]' : '';
+                text += `[${time}] ${author.displayName || author.username || 'Unknown'}${botTag}:\n`;
+                text += `${msg.content || '(no content)'}\n`;
+                if (msg.attachments?.length) {
+                    text += `  [${msg.attachments.length} attachment(s)]\n`;
+                }
+                if (msg.reactions?.length) {
+                    text += `  Reactions: ${msg.reactions.map(r => `${r.emoji} x${r.count}`).join(', ')}\n`;
+                }
+                text += '\n';
+            });
+
+            const filename = `discord-export-${meta.channelName || 'messages'}-${Date.now()}.txt`;
+            downloadFile(text, filename, 'text/plain');
+        }
+
+        function copyToClipboard() {
+            if (!lastExportData) return;
+            navigator.clipboard.writeText(JSON.stringify(lastExportData, null, 2))
+                .then(() => alert('Copied to clipboard!'))
+                .catch(err => alert('Failed to copy: ' + err.message));
+        }
+
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function escapeHtml(text) {
