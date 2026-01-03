@@ -400,8 +400,8 @@
                     <button class="tab active" onclick="showTab('preview')">Preview</button>
                     <button class="tab" onclick="showTab('json')">Raw JSON</button>
                     <div style="margin-left: auto; display: flex; gap: 8px;">
-                        <button class="download-btn" onclick="downloadJSON()">Download JSON</button>
-                        <button class="download-btn" onclick="downloadText()">Download Text</button>
+                        <button class="download-btn" onclick="saveAsJSON()">Save JSON As...</button>
+                        <button class="download-btn" onclick="saveAsText()">Save Text As...</button>
                         <button class="download-btn" onclick="copyToClipboard()">Copy JSON</button>
                     </div>
                 </div>
@@ -659,15 +659,12 @@
             `;
         }
 
-        function downloadJSON() {
-            if (!lastExportData) return;
-            const meta = lastExportData.metadata || {};
-            const filename = `discord-export-${meta.channelName || 'messages'}-${Date.now()}.json`;
-            downloadFile(JSON.stringify(lastExportData, null, 2), filename, 'application/json');
+        function getDefaultFilename(ext) {
+            const meta = lastExportData?.metadata || {};
+            return `discord-export-${meta.channelName || 'messages'}-${Date.now()}.${ext}`;
         }
 
-        function downloadText() {
-            if (!lastExportData) return;
+        function getTextContent() {
             const meta = lastExportData.metadata || {};
             const messages = lastExportData.messages || [];
 
@@ -690,9 +687,54 @@
                 }
                 text += '\n';
             });
+            return text;
+        }
 
-            const filename = `discord-export-${meta.channelName || 'messages'}-${Date.now()}.txt`;
-            downloadFile(text, filename, 'text/plain');
+        async function saveAsJSON() {
+            if (!lastExportData) return;
+            const content = JSON.stringify(lastExportData, null, 2);
+            await saveFileAs(content, getDefaultFilename('json'), {
+                description: 'JSON Files',
+                accept: { 'application/json': ['.json'] }
+            });
+        }
+
+        async function saveAsText() {
+            if (!lastExportData) return;
+            const content = getTextContent();
+            await saveFileAs(content, getDefaultFilename('txt'), {
+                description: 'Text Files',
+                accept: { 'text/plain': ['.txt'] }
+            });
+        }
+
+        async function saveFileAs(content, suggestedName, fileType) {
+            // Try File System Access API (Chrome/Edge)
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName,
+                        types: [fileType]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    return;
+                } catch (err) {
+                    if (err.name === 'AbortError') return; // User cancelled
+                    console.warn('File System Access API failed, falling back:', err);
+                }
+            }
+            // Fallback for Firefox/Safari
+            const blob = new Blob([content], { type: Object.keys(fileType.accept)[0] });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = suggestedName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function copyToClipboard() {
@@ -700,18 +742,6 @@
             navigator.clipboard.writeText(JSON.stringify(lastExportData, null, 2))
                 .then(() => alert('Copied to clipboard!'))
                 .catch(err => alert('Failed to copy: ' + err.message));
-        }
-
-        function downloadFile(content, filename, type) {
-            const blob = new Blob([content], { type });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
         }
 
         function escapeHtml(text) {
