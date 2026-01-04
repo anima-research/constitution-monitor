@@ -341,11 +341,74 @@
             margin: 8px 0;
             font-size: 0.85rem;
         }
+
+        .surprise-btn {
+            background: transparent;
+            border: 1px solid #333;
+            color: #444;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+
+        .surprise-btn:hover {
+            border-color: #666;
+            color: #666;
+        }
+
+        @keyframes rainbow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes wiggle {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+
+        body.party-mode {
+            background: linear-gradient(124deg, #ff2400, #e81d1d, #e8b71d, #e3e81d, #1de840, #1ddde8, #2b1de8, #dd00f3, #dd00f3);
+            background-size: 1800% 1800%;
+            animation: rainbow 2s ease infinite;
+        }
+
+        body.party-mode .card {
+            animation: wiggle 0.3s ease infinite;
+        }
+
+        body.party-mode h1 {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        .confetti {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            font-size: 24px;
+            animation: fall linear forwards;
+        }
+
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Borgs Discord Export API</h1>
+        <h1>Borgs Discord Export API <button class="surprise-btn" onclick="partyTime()">?</button></h1>
         <p class="subtitle">Export and view Discord messages</p>
 
         <!-- API Configuration -->
@@ -748,6 +811,44 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function partyTime() {
+            document.body.classList.add('party-mode');
+
+            // Spawn confetti
+            const confetti = ['🎉', '🎊', '✨', '💫', '🌟', '🎈', '🍕', '💀', '👻', '🤖', '🦆', '🔥'];
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const c = document.createElement('div');
+                    c.className = 'confetti';
+                    c.textContent = confetti[Math.floor(Math.random() * confetti.length)];
+                    c.style.left = Math.random() * 100 + 'vw';
+                    c.style.top = '-50px';
+                    c.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                    document.body.appendChild(c);
+                    setTimeout(() => c.remove(), 4000);
+                }, i * 50);
+            }
+
+            // Change subtitle temporarily
+            const subtitle = document.querySelector('.subtitle');
+            const originalText = subtitle.textContent;
+            const sillyMessages = [
+                'WOOOO PARTY MODE ACTIVATED 🎉',
+                'WHY DID YOU CLICK THAT',
+                'DISCORD EXPORT GOES BRRRRRR',
+                'I HOPE YOU\'RE HAVING A GREAT DAY',
+                'THE MESSAGES ARE VIBING',
+                'EVERYTHING IS FINE 🔥',
+            ];
+            subtitle.textContent = sillyMessages[Math.floor(Math.random() * sillyMessages.length)];
+
+            // Stop the madness after 5 seconds
+            setTimeout(() => {
+                document.body.classList.remove('party-mode');
+                subtitle.textContent = originalText;
+            }, 5000);
         }
     </script>
 </body>
