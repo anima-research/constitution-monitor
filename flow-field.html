@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow Field</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 13px;
+            z-index: 100;
+            min-width: 220px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .controls h1 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            font-weight: 500;
+            color: #fff;
+        }
+
+        .controls p {
+            color: #888;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: #7289da;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #7289da;
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            flex: 1;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #5b6eae;
+        }
+
+        button.danger {
+            background: #da7272;
+        }
+
+        button.danger:hover {
+            background: #c55a5a;
+        }
+
+        .presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .presets button {
+            flex: 0 0 auto;
+            padding: 6px 10px;
+            font-size: 11px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .presets button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #666;
+            font-size: 11px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .toggle-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 101;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .color-mode {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .color-dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .color-dot:hover {
+            transform: scale(1.1);
+        }
+
+        .color-dot.active {
+            border-color: white;
+        }
+
+        .instructions {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: #888;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+
+        .instructions.fade {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="controls" id="controls">
+        <h1>Flow Field</h1>
+        <p>Click to add attractors<br>Right-click for repellers</p>
+
+        <div class="control-group">
+            <label>Particle Count: <span id="particleCountVal">1000</span></label>
+            <input type="range" id="particleCount" min="100" max="5000" value="1000" step="100">
+        </div>
+
+        <div class="control-group">
+            <label>Flow Speed: <span id="flowSpeedVal">1.0</span></label>
+            <input type="range" id="flowSpeed" min="0.1" max="3" value="1" step="0.1">
+        </div>
+
+        <div class="control-group">
+            <label>Noise Scale: <span id="noiseScaleVal">0.005</span></label>
+            <input type="range" id="noiseScale" min="0.001" max="0.02" value="0.005" step="0.001">
+        </div>
+
+        <div class="control-group">
+            <label>Trail Length: <span id="trailLengthVal">0.05</span></label>
+            <input type="range" id="trailLength" min="0.01" max="0.3" value="0.05" step="0.01">
+        </div>
+
+        <div class="control-group">
+            <label>Force Strength: <span id="forceStrengthVal">200</span></label>
+            <input type="range" id="forceStrength" min="50" max="500" value="200" step="10">
+        </div>
+
+        <div class="control-group">
+            <label>Color Mode</label>
+            <div class="color-mode">
+                <div class="color-dot active" data-mode="rainbow" style="background: linear-gradient(135deg, #ff0000, #00ff00, #0000ff);"></div>
+                <div class="color-dot" data-mode="fire" style="background: linear-gradient(135deg, #ff4400, #ffaa00);"></div>
+                <div class="color-dot" data-mode="ocean" style="background: linear-gradient(135deg, #0066ff, #00ffcc);"></div>
+                <div class="color-dot" data-mode="purple" style="background: linear-gradient(135deg, #aa00ff, #ff00aa);"></div>
+                <div class="color-dot" data-mode="mono" style="background: #ffffff;"></div>
+            </div>
+        </div>
+
+        <div class="control-row">
+            <button onclick="clearAttractors()">Clear Forces</button>
+            <button onclick="reset()" class="danger">Reset</button>
+        </div>
+
+        <div class="presets">
+            <button onclick="applyPreset('calm')">Calm</button>
+            <button onclick="applyPreset('chaos')">Chaos</button>
+            <button onclick="applyPreset('swirl')">Swirl</button>
+            <button onclick="applyPreset('dense')">Dense</button>
+        </div>
+
+        <div class="stats">
+            <div>Particles: <span id="statsParticles">0</span></div>
+            <div>Attractors: <span id="statsAttractors">0</span></div>
+            <div>FPS: <span id="statsFps">0</span></div>
+        </div>
+    </div>
+
+    <button class="toggle-btn hidden" id="toggleBtn" onclick="toggleControls()">+</button>
+
+    <div class="instructions" id="instructions">
+        Click anywhere to create attractors | Right-click for repellers | Scroll to adjust force radius
+    </div>
+
+    <script>
+        // Simplex noise implementation
+        const noise = (() => {
+            const F2 = 0.5 * (Math.sqrt(3) - 1);
+            const G2 = (3 - Math.sqrt(3)) / 6;
+            const perm = new Uint8Array(512);
+            const gradP = new Array(512);
+            const grad3 = [
+                [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+                [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+                [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]
+            ];
+
+            function seed(s) {
+                if (s > 0 && s < 1) s *= 65536;
+                s = Math.floor(s);
+                if (s < 256) s |= s << 8;
+                const p = new Uint8Array(256);
+                for (let i = 0; i < 256; i++) {
+                    let v;
+                    if (i & 1) v = s ^ (s >>> 1);
+                    else v = s ^ (s << 1);
+                    p[i] = v & 255;
+                    s = (s * 16807) % 2147483647;
+                }
+                for (let i = 0; i < 512; i++) {
+                    perm[i] = p[i & 255];
+                    gradP[i] = grad3[perm[i] % 12];
+                }
+            }
+
+            function simplex2(x, y) {
+                let n0, n1, n2;
+                const s = (x + y) * F2;
+                const i = Math.floor(x + s);
+                const j = Math.floor(y + s);
+                const t = (i + j) * G2;
+                const X0 = i - t;
+                const Y0 = j - t;
+                const x0 = x - X0;
+                const y0 = y - Y0;
+                let i1, j1;
+                if (x0 > y0) { i1 = 1; j1 = 0; }
+                else { i1 = 0; j1 = 1; }
+                const x1 = x0 - i1 + G2;
+                const y1 = y0 - j1 + G2;
+                const x2 = x0 - 1 + 2 * G2;
+                const y2 = y0 - 1 + 2 * G2;
+                const ii = i & 255;
+                const jj = j & 255;
+                const gi0 = gradP[ii + perm[jj]];
+                const gi1 = gradP[ii + i1 + perm[jj + j1]];
+                const gi2 = gradP[ii + 1 + perm[jj + 1]];
+                let t0 = 0.5 - x0*x0 - y0*y0;
+                if (t0 < 0) n0 = 0;
+                else {
+                    t0 *= t0;
+                    n0 = t0 * t0 * (gi0[0]*x0 + gi0[1]*y0);
+                }
+                let t1 = 0.5 - x1*x1 - y1*y1;
+                if (t1 < 0) n1 = 0;
+                else {
+                    t1 *= t1;
+                    n1 = t1 * t1 * (gi1[0]*x1 + gi1[1]*y1);
+                }
+                let t2 = 0.5 - x2*x2 - y2*y2;
+                if (t2 < 0) n2 = 0;
+                else {
+                    t2 *= t2;
+                    n2 = t2 * t2 * (gi2[0]*x2 + gi2[1]*y2);
+                }
+                return 70 * (n0 + n1 + n2);
+            }
+
+            seed(Math.random() * 65536);
+            return { simplex2, seed };
+        })();
+
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let width, height;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        // Configuration
+        let config = {
+            particleCount: 1000,
+            flowSpeed: 1,
+            noiseScale: 0.005,
+            trailLength: 0.05,
+            forceStrength: 200,
+            colorMode: 'rainbow'
+        };
+
+        // Particles
+        let particles = [];
+        let attractors = [];
+        let time = 0;
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = 0;
+                this.vy = 0;
+                this.age = Math.random() * 100;
+                this.maxAge = 100 + Math.random() * 200;
+            }
+
+            update() {
+                // Noise-based flow field
+                const angle = noise.simplex2(
+                    this.x * config.noiseScale,
+                    this.y * config.noiseScale + time * 0.0005
+                ) * Math.PI * 4;
+
+                this.vx += Math.cos(angle) * 0.2 * config.flowSpeed;
+                this.vy += Math.sin(angle) * 0.2 * config.flowSpeed;
+
+                // Apply attractor/repeller forces
+                for (const a of attractors) {
+                    const dx = a.x - this.x;
+                    const dy = a.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < a.radius && dist > 1) {
+                        const force = (config.forceStrength / (dist * dist)) * a.strength;
+                        this.vx += (dx / dist) * force;
+                        this.vy += (dy / dist) * force;
+                    }
+                }
+
+                // Friction
+                this.vx *= 0.95;
+                this.vy *= 0.95;
+
+                // Speed limit
+                const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (speed > 8) {
+                    this.vx = (this.vx / speed) * 8;
+                    this.vy = (this.vy / speed) * 8;
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+                this.age++;
+
+                // Wrap around edges
+                if (this.x < 0) this.x = width;
+                if (this.x > width) this.x = 0;
+                if (this.y < 0) this.y = height;
+                if (this.y > height) this.y = 0;
+
+                // Reset if too old
+                if (this.age > this.maxAge) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                const alpha = Math.min(1, speed / 3) * (1 - this.age / this.maxAge);
+
+                let color;
+                switch (config.colorMode) {
+                    case 'rainbow':
+                        const hue = (this.x / width * 360 + time * 0.5) % 360;
+                        color = `hsla(${hue}, 80%, 60%, ${alpha})`;
+                        break;
+                    case 'fire':
+                        const fireHue = 20 + speed * 10;
+                        color = `hsla(${fireHue}, 100%, ${50 + speed * 5}%, ${alpha})`;
+                        break;
+                    case 'ocean':
+                        const oceanHue = 180 + speed * 20;
+                        color = `hsla(${oceanHue}, 80%, 50%, ${alpha})`;
+                        break;
+                    case 'purple':
+                        const purpleHue = 270 + Math.sin(this.y * 0.01) * 30;
+                        color = `hsla(${purpleHue}, 80%, 60%, ${alpha})`;
+                        break;
+                    case 'mono':
+                    default:
+                        color = `rgba(255, 255, 255, ${alpha})`;
+                }
+
+                ctx.fillStyle = color;
+                ctx.fillRect(this.x, this.y, 2, 2);
+            }
+        }
+
+        // Initialize particles
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < config.particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+        initParticles();
+
+        // Animation loop
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 0;
+
+        function animate(currentTime) {
+            // FPS calculation
+            frameCount++;
+            if (currentTime - lastTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastTime = currentTime;
+                document.getElementById('statsFps').textContent = fps;
+            }
+
+            // Trail effect
+            ctx.fillStyle = `rgba(0, 0, 0, ${config.trailLength})`;
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw attractors
+            for (const a of attractors) {
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = a.strength > 0 ? 'rgba(100, 200, 255, 0.5)' : 'rgba(255, 100, 100, 0.5)';
+                ctx.fill();
+
+                // Draw influence radius
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, a.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = a.strength > 0 ? 'rgba(100, 200, 255, 0.1)' : 'rgba(255, 100, 100, 0.1)';
+                ctx.stroke();
+            }
+
+            // Update and draw particles
+            for (const p of particles) {
+                p.update();
+                p.draw();
+            }
+
+            time++;
+            document.getElementById('statsParticles').textContent = particles.length;
+            document.getElementById('statsAttractors').textContent = attractors.length;
+
+            requestAnimationFrame(animate);
+        }
+        animate(performance.now());
+
+        // Event listeners
+        canvas.addEventListener('click', (e) => {
+            attractors.push({
+                x: e.clientX,
+                y: e.clientY,
+                strength: 1,
+                radius: 150
+            });
+        });
+
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            attractors.push({
+                x: e.clientX,
+                y: e.clientY,
+                strength: -1,
+                radius: 150
+            });
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            // Find nearest attractor and adjust its radius
+            let nearest = null;
+            let nearestDist = Infinity;
+            for (const a of attractors) {
+                const dx = a.x - e.clientX;
+                const dy = a.y - e.clientY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < nearestDist && dist < 200) {
+                    nearestDist = dist;
+                    nearest = a;
+                }
+            }
+            if (nearest) {
+                nearest.radius = Math.max(50, Math.min(400, nearest.radius - e.deltaY * 0.5));
+            }
+        });
+
+        // Control bindings
+        document.getElementById('particleCount').addEventListener('input', (e) => {
+            config.particleCount = parseInt(e.target.value);
+            document.getElementById('particleCountVal').textContent = config.particleCount;
+            initParticles();
+        });
+
+        document.getElementById('flowSpeed').addEventListener('input', (e) => {
+            config.flowSpeed = parseFloat(e.target.value);
+            document.getElementById('flowSpeedVal').textContent = config.flowSpeed.toFixed(1);
+        });
+
+        document.getElementById('noiseScale').addEventListener('input', (e) => {
+            config.noiseScale = parseFloat(e.target.value);
+            document.getElementById('noiseScaleVal').textContent = config.noiseScale.toFixed(3);
+        });
+
+        document.getElementById('trailLength').addEventListener('input', (e) => {
+            config.trailLength = parseFloat(e.target.value);
+            document.getElementById('trailLengthVal').textContent = config.trailLength.toFixed(2);
+        });
+
+        document.getElementById('forceStrength').addEventListener('input', (e) => {
+            config.forceStrength = parseInt(e.target.value);
+            document.getElementById('forceStrengthVal').textContent = config.forceStrength;
+        });
+
+        document.querySelectorAll('.color-dot').forEach(dot => {
+            dot.addEventListener('click', () => {
+                document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('active'));
+                dot.classList.add('active');
+                config.colorMode = dot.dataset.mode;
+            });
+        });
+
+        function clearAttractors() {
+            attractors = [];
+        }
+
+        function reset() {
+            attractors = [];
+            noise.seed(Math.random() * 65536);
+            initParticles();
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        function applyPreset(preset) {
+            switch (preset) {
+                case 'calm':
+                    config.particleCount = 500;
+                    config.flowSpeed = 0.5;
+                    config.noiseScale = 0.003;
+                    config.trailLength = 0.02;
+                    break;
+                case 'chaos':
+                    config.particleCount = 2000;
+                    config.flowSpeed = 2.5;
+                    config.noiseScale = 0.015;
+                    config.trailLength = 0.1;
+                    break;
+                case 'swirl':
+                    config.particleCount = 1500;
+                    config.flowSpeed = 1.5;
+                    config.noiseScale = 0.008;
+                    config.trailLength = 0.03;
+                    break;
+                case 'dense':
+                    config.particleCount = 4000;
+                    config.flowSpeed = 0.8;
+                    config.noiseScale = 0.004;
+                    config.trailLength = 0.01;
+                    break;
+            }
+            // Update UI
+            document.getElementById('particleCount').value = config.particleCount;
+            document.getElementById('particleCountVal').textContent = config.particleCount;
+            document.getElementById('flowSpeed').value = config.flowSpeed;
+            document.getElementById('flowSpeedVal').textContent = config.flowSpeed.toFixed(1);
+            document.getElementById('noiseScale').value = config.noiseScale;
+            document.getElementById('noiseScaleVal').textContent = config.noiseScale.toFixed(3);
+            document.getElementById('trailLength').value = config.trailLength;
+            document.getElementById('trailLengthVal').textContent = config.trailLength.toFixed(2);
+            initParticles();
+        }
+
+        function toggleControls() {
+            const controls = document.getElementById('controls');
+            const toggleBtn = document.getElementById('toggleBtn');
+            controls.classList.toggle('hidden');
+            toggleBtn.classList.toggle('hidden');
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'h' || e.key === 'H') {
+                toggleControls();
+            } else if (e.key === 'c' || e.key === 'C') {
+                clearAttractors();
+            } else if (e.key === 'r' || e.key === 'R') {
+                reset();
+            } else if (e.key >= '1' && e.key <= '5') {
+                const modes = ['rainbow', 'fire', 'ocean', 'purple', 'mono'];
+                config.colorMode = modes[parseInt(e.key) - 1];
+                document.querySelectorAll('.color-dot').forEach((d, i) => {
+                    d.classList.toggle('active', i === parseInt(e.key) - 1);
+                });
+            }
+        });
+
+        // Fade out instructions
+        setTimeout(() => {
+            document.getElementById('instructions').classList.add('fade');
+        }, 5000);
+    </script>
+</body>
+</html>
