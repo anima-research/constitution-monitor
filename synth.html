@@ -395,6 +395,114 @@
             height: 100%;
         }
 
+        /* Note Display */
+        .note-display-container {
+            margin-top: 25px;
+            padding: 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+        }
+
+        .note-display-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .note-display-header h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #888;
+            font-weight: 500;
+        }
+
+        .keyboard-mode-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .keyboard-mode-toggle span {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .mode-switch {
+            display: flex;
+            background: rgba(0,0,0,0.3);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .mode-btn {
+            padding: 6px 12px;
+            font-size: 0.7rem;
+            background: transparent;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .mode-btn.active {
+            background: #7289da;
+            color: #fff;
+        }
+
+        .mode-btn:hover:not(.active) {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .note-display {
+            min-height: 80px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            padding: 15px;
+        }
+
+        .note-display .note {
+            font-size: 2.5rem;
+            font-weight: 300;
+            color: #7289da;
+            text-shadow: 0 0 20px rgba(114, 137, 218, 0.5);
+            animation: noteAppear 0.1s ease-out;
+        }
+
+        .note-display .note.sharp {
+            color: #9b59b6;
+            text-shadow: 0 0 20px rgba(155, 89, 182, 0.5);
+        }
+
+        .note-display .empty {
+            font-size: 1rem;
+            color: #444;
+        }
+
+        @keyframes noteAppear {
+            from {
+                transform: scale(1.2);
+                opacity: 0.5;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .key-hint {
+            font-size: 0.7rem;
+            color: #666;
+            text-align: center;
+            margin-top: 10px;
+        }
+
         /* Presets */
         .presets {
             display: flex;
@@ -513,7 +621,7 @@
     <div class="container">
         <header>
             <h1>Web Synth</h1>
-            <p>Play with keyboard: A-K for white keys, W-U for black keys</p>
+            <p>Play with your computer keyboard - switch between Standard and Extended modes</p>
         </header>
 
         <div class="synth-panel">
@@ -692,6 +800,26 @@
                 <canvas id="visualizer"></canvas>
             </div>
 
+            <!-- Note Display -->
+            <div class="note-display-container">
+                <div class="note-display-header">
+                    <h3>Now Playing</h3>
+                    <div class="keyboard-mode-toggle">
+                        <span>Keyboard Mode:</span>
+                        <div class="mode-switch">
+                            <button class="mode-btn active" data-mode="standard" onclick="setKeyboardMode('standard')">Standard</button>
+                            <button class="mode-btn" data-mode="extended" onclick="setKeyboardMode('extended')">Extended (Q-/)</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="note-display" id="noteDisplay">
+                    <span class="empty">Play a note...</span>
+                </div>
+                <div class="key-hint" id="keyHint">
+                    Standard: A-K white keys, W-U black keys (C4-C5)
+                </div>
+            </div>
+
             <!-- Keyboard -->
             <div class="keyboard-container">
                 <div class="keyboard" id="keyboard"></div>
@@ -751,22 +879,51 @@
         // Active voices
         const activeVoices = new Map();
 
-        // Note frequencies
+        // Keyboard mode
+        let keyboardMode = 'standard';
+
+        // Note frequencies (expanded for more octaves)
         const noteFreqs = {
+            'C2': 65.41, 'C#2': 69.30, 'D2': 73.42, 'D#2': 77.78, 'E2': 82.41,
+            'F2': 87.31, 'F#2': 92.50, 'G2': 98.00, 'G#2': 103.83, 'A2': 110.00,
+            'A#2': 116.54, 'B2': 123.47,
             'C3': 130.81, 'C#3': 138.59, 'D3': 146.83, 'D#3': 155.56, 'E3': 164.81,
             'F3': 174.61, 'F#3': 185.00, 'G3': 196.00, 'G#3': 207.65, 'A3': 220.00,
             'A#3': 233.08, 'B3': 246.94,
             'C4': 261.63, 'C#4': 277.18, 'D4': 293.66, 'D#4': 311.13, 'E4': 329.63,
             'F4': 349.23, 'F#4': 369.99, 'G4': 392.00, 'G#4': 415.30, 'A4': 440.00,
-            'A#4': 466.16, 'B4': 493.88, 'C5': 523.25
+            'A#4': 466.16, 'B4': 493.88,
+            'C5': 523.25, 'C#5': 554.37, 'D5': 587.33, 'D#5': 622.25, 'E5': 659.25,
+            'F5': 698.46, 'F#5': 739.99, 'G5': 783.99, 'G#5': 830.61, 'A5': 880.00,
+            'A#5': 932.33, 'B5': 987.77,
+            'C6': 1046.50
         };
 
-        // Keyboard mapping
-        const keyMap = {
+        // Standard keyboard mapping (piano-style, one octave)
+        const standardKeyMap = {
             'a': 'C4', 'w': 'C#4', 's': 'D4', 'e': 'D#4', 'd': 'E4',
             'f': 'F4', 't': 'F#4', 'g': 'G4', 'y': 'G#4', 'h': 'A4',
             'u': 'A#4', 'j': 'B4', 'k': 'C5'
         };
+
+        // Extended keyboard mapping (Q to /, chromatic over ~2.5 octaves)
+        const extendedKeyMap = {
+            // Top row: C3 to B3
+            'q': 'C3', '2': 'C#3', 'w': 'D3', '3': 'D#3', 'e': 'E3',
+            'r': 'F3', '5': 'F#3', 't': 'G3', '6': 'G#3', 'y': 'A3',
+            '7': 'A#3', 'u': 'B3',
+            // Middle row: C4 to B4
+            'i': 'C4', '9': 'C#4', 'o': 'D4', '0': 'D#4', 'p': 'E4',
+            '[': 'F4', '=': 'F#4', ']': 'G4',
+            'a': 'G#4', 'z': 'A4', 's': 'A#4', 'x': 'B4',
+            // Bottom row: C5 to C6
+            'c': 'C5', 'f': 'C#5', 'v': 'D5', 'g': 'D#5', 'b': 'E5',
+            'n': 'F5', 'j': 'F#5', 'm': 'G5', 'k': 'G#5', ',': 'A5',
+            'l': 'A#5', '.': 'B5', '/': 'C6'
+        };
+
+        // Active key map (switches based on mode)
+        let keyMap = standardKeyMap;
 
         // Initialize audio
         function initAudio() {
@@ -872,6 +1029,9 @@
             // Update keyboard UI
             const keyEl = document.querySelector(`.key[data-note="${note}"]`);
             if (keyEl) keyEl.classList.add('active');
+
+            // Update note display
+            updateNoteDisplay();
         }
 
         // Stop a note
@@ -900,6 +1060,51 @@
             // Update keyboard UI
             const keyEl = document.querySelector(`.key[data-note="${note}"]`);
             if (keyEl) keyEl.classList.remove('active');
+
+            // Update note display
+            updateNoteDisplay();
+        }
+
+        // Update note display
+        function updateNoteDisplay() {
+            const display = document.getElementById('noteDisplay');
+            const notes = Array.from(activeVoices.keys());
+
+            if (notes.length === 0) {
+                display.innerHTML = '<span class="empty">Play a note...</span>';
+            } else {
+                display.innerHTML = notes.map(note => {
+                    // Format note for display (e.g., C#4 -> C#4, use ♯ for sharps)
+                    const displayNote = note.replace('#', '♯');
+                    const isSharp = note.includes('#');
+                    return `<span class="note ${isSharp ? 'sharp' : ''}">${displayNote}</span>`;
+                }).join('');
+            }
+        }
+
+        // Set keyboard mode
+        function setKeyboardMode(mode) {
+            // Stop all current notes
+            activeVoices.forEach((_, note) => stopNote(note));
+
+            keyboardMode = mode;
+            keyMap = mode === 'extended' ? extendedKeyMap : standardKeyMap;
+
+            // Update UI
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+
+            // Update hint text
+            const hint = document.getElementById('keyHint');
+            if (mode === 'extended') {
+                hint.innerHTML = `
+                    Extended: Q-U (C3-B3), I-] + A,Z,S,X (C4-B4), C-/ (C5-C6)<br>
+                    Number keys for sharps/flats
+                `;
+            } else {
+                hint.textContent = 'Standard: A-K white keys, W-U black keys (C4-C5)';
+            }
         }
 
         // Build keyboard UI
