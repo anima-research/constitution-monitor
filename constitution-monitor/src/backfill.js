@@ -1,0 +1,478 @@
+#!/usr/bin/env node
+/**
+ * Backfill script - Pulls historical versions from the Wayback Machine
+ *
+ * Usage: npm run backfill
+ */
+
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
+import * as cheerio from 'cheerio';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = path.join(__dirname, '..');
+const VERSIONS_DIR = path.join(ROOT_DIR, 'versions');
+const CHANGELOG_FILE = path.join(ROOT_DIR, 'CHANGELOG.md');
+const METADATA_FILE = path.join(VERSIONS_DIR, 'metadata.json');
+
+const CONSTITUTION_URL = 'https://www.anthropic.com/constitution';
+const CDX_API = 'https://web.archive.org/cdx/search/cdx';
+const CUTOFF_DATE = '20260129'; // Don't fetch snapshots on or after this date
+
+// Rate limiting
+const DELAY_MS = 1500; // Delay between requests to be nice to archive.org
+
+/**
+ * Sleep for specified milliseconds
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Query the CDX API for all snapshots
+ */
+async function querySnapshots() {
+  console.log('Querying Wayback Machine CDX API...');
+
+  const params = new URLSearchParams({
+    url: CONSTITUTION_URL,
+    output: 'json',
+    fl: 'timestamp,statuscode,digest',
+    filter: 'statuscode:200',
+    to: CUTOFF_DATE
+  });
+
+  const response = await fetch(`${CDX_API}?${params}`);
+  if (!response.ok) {
+    throw new Error(`CDX API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  // First row is headers
+  const headers = data[0];
+  const rows = data.slice(1);
+
+  console.log(`Found ${rows.length} total snapshots`);
+
+  return rows.map(row => ({
+    timestamp: row[0],
+    statuscode: row[1],
+    digest: row[2]
+  }));
+}
+
+/**
+ * Group snapshots by date and pick one per day (earliest)
+ */
+function selectDailySnapshots(snapshots) {
+  const byDate = new Map();
+
+  for (const snapshot of snapshots) {
+    const date = snapshot.timestamp.slice(0, 8); // YYYYMMDD
+
+    // Keep earliest snapshot per day
+    if (!byDate.has(date) || snapshot.timestamp < byDate.get(date).timestamp) {
+      byDate.set(date, snapshot);
+    }
+  }
+
+  // Sort by date
+  const daily = Array.from(byDate.values())
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  console.log(`Selected ${daily.length} daily snapshots`);
+  return daily;
+}
+
+/**
+ * Fetch a snapshot from the Wayback Machine
+ */
+async function fetchSnapshot(timestamp) {
+  const url = `https://web.archive.org/web/${timestamp}id_/${CONSTITUTION_URL}`;
+  console.log(`  Fetching ${timestamp}...`);
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'ConstitutionMonitor/1.0 (historical backfill)'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${timestamp}: ${response.status}`);
+  }
+
+  return response.text();
+}
+
+/**
+ * Strip Wayback Machine UI elements and extract text content
+ */
+function extractContent(html) {
+  const $ = cheerio.load(html);
+
+  // Remove Wayback Machine toolbar and injected elements
+  $('#wm-ipp-base').remove();
+  $('#wm-ipp').remove();
+  $('#donato').remove();
+  $('#playback').remove();
+  $('script[src*="archive.org"]').remove();
+  $('link[href*="archive.org"]').remove();
+  $('style:contains("__wb")').remove();
+
+  // Remove any elements with wayback-specific classes/ids
+  $('[id^="wm-"]').remove();
+  $('[class*="__wb"]').remove();
+
+  // Also remove standard non-content elements
+  $('script, style, nav, header, footer, noscript, iframe').remove();
+
+  // Remove Wayback Machine comment markers
+  $('*').contents().filter(function() {
+    return this.type === 'comment';
+  }).remove();
+
+  // Find main content - look for article, main, or fall back to body
+  const mainContent = $('article').length ? $('article') :
+                      ($('main').length ? $('main') : $('body'));
+
+  // Get all text including from collapsed/expandable sections
+  // (they're in the DOM, just hidden via CSS)
+  let text = mainContent.text();
+
+  // Clean up whitespace
+  const lines = text.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    // Filter out Wayback Machine artifacts that might remain
+    .filter(line => !line.includes('web.archive.org'))
+    .filter(line => !line.includes('Wayback Machine'))
+    .filter(line => !line.match(/^\d+ captures?$/))
+    .filter(line => !line.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+, \d{4}$/));
+
+  return lines.join('\n\n');
+}
+
+/**
+ * Generate content hash
+ */
+function getContentHash(content) {
+  return crypto.createHash('sha256').update(content).digest('hex').slice(0, 12);
+}
+
+/**
+ * Format timestamp to readable date
+ */
+function formatTimestamp(ts) {
+  const year = ts.slice(0, 4);
+  const month = ts.slice(4, 6);
+  const day = ts.slice(6, 8);
+  const hour = ts.slice(8, 10) || '00';
+  const min = ts.slice(10, 12) || '00';
+  const sec = ts.slice(12, 14) || '00';
+
+  return `${year}-${month}-${day} ${hour}:${min}:${sec} UTC`;
+}
+
+/**
+ * Format timestamp for filenames
+ */
+function formatTimestampForFile(ts) {
+  return formatTimestamp(ts).replace(/:/g, '-').replace(/ /g, '_');
+}
+
+/**
+ * Generate diff summary between two versions
+ */
+function generateDiffSummary(oldContent, newContent) {
+  const oldLines = new Set(oldContent.split('\n').filter(l => l.trim()));
+  const newLines = new Set(newContent.split('\n').filter(l => l.trim()));
+
+  const added = [...newLines].filter(l => !oldLines.has(l));
+  const removed = [...oldLines].filter(l => !newLines.has(l));
+
+  return {
+    linesAdded: added.length,
+    linesRemoved: removed.length,
+    addedPreview: added.slice(0, 5),
+    removedPreview: removed.slice(0, 5)
+  };
+}
+
+/**
+ * Generate unified diff
+ */
+function generateDiff(oldContent, newContent) {
+  const oldLines = oldContent.split('\n');
+  const newLines = newContent.split('\n');
+
+  const diff = ['--- previous', '+++ current'];
+
+  const maxLen = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    const oldLine = oldLines[i] || '';
+    const newLine = newLines[i] || '';
+
+    if (oldLine !== newLine) {
+      if (oldLine) diff.push(`- ${oldLine}`);
+      if (newLine) diff.push(`+ ${newLine}`);
+    }
+  }
+
+  return diff.join('\n');
+}
+
+/**
+ * Load existing metadata
+ */
+async function loadMetadata() {
+  try {
+    const data = await fs.readFile(METADATA_FILE, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return { versions: [] };
+  }
+}
+
+/**
+ * Save metadata
+ */
+async function saveMetadata(metadata) {
+  await fs.writeFile(METADATA_FILE, JSON.stringify(metadata, null, 2));
+}
+
+/**
+ * Main backfill function
+ */
+async function backfill() {
+  console.log('='.repeat(60));
+  console.log('Constitution Monitor - Wayback Machine Backfill');
+  console.log('='.repeat(60));
+  console.log();
+
+  await fs.mkdir(VERSIONS_DIR, { recursive: true });
+
+  // Query CDX API for snapshots
+  const allSnapshots = await querySnapshots();
+  const dailySnapshots = selectDailySnapshots(allSnapshots);
+
+  if (dailySnapshots.length === 0) {
+    console.log('No snapshots found!');
+    return;
+  }
+
+  console.log();
+  console.log('Fetching and processing snapshots...');
+  console.log();
+
+  // Track versions and changes
+  const versions = [];
+  const changes = [];
+  let previousContent = null;
+  let previousTimestamp = null;
+
+  for (let i = 0; i < dailySnapshots.length; i++) {
+    const snapshot = dailySnapshots[i];
+    const progress = `[${i + 1}/${dailySnapshots.length}]`;
+
+    try {
+      const html = await fetchSnapshot(snapshot.timestamp);
+      const content = extractContent(html);
+      const hash = getContentHash(content);
+      const timestamp = formatTimestamp(snapshot.timestamp);
+      const fileTimestamp = formatTimestampForFile(snapshot.timestamp);
+
+      // Save version
+      const versionFile = `${fileTimestamp}_${hash}.txt`;
+      await fs.writeFile(path.join(VERSIONS_DIR, versionFile), content);
+
+      versions.push({
+        timestamp,
+        hash,
+        file: versionFile,
+        waybackTimestamp: snapshot.timestamp
+      });
+
+      // Compare with previous
+      if (previousContent !== null) {
+        const prevHash = getContentHash(previousContent);
+
+        if (hash !== prevHash) {
+          console.log(`  ${progress} CHANGE DETECTED at ${timestamp}`);
+
+          const diffSummary = generateDiffSummary(previousContent, content);
+          const diff = generateDiff(previousContent, content);
+
+          // Save diff
+          const diffFile = `${fileTimestamp}_${hash}.diff`;
+          await fs.writeFile(path.join(VERSIONS_DIR, diffFile), diff);
+
+          changes.push({
+            timestamp,
+            hash,
+            previousTimestamp,
+            diffSummary,
+            diffFile
+          });
+        } else {
+          console.log(`  ${progress} No change at ${timestamp}`);
+        }
+      } else {
+        console.log(`  ${progress} Initial version: ${timestamp}`);
+      }
+
+      previousContent = content;
+      previousTimestamp = timestamp;
+
+      // Rate limit
+      if (i < dailySnapshots.length - 1) {
+        await sleep(DELAY_MS);
+      }
+
+    } catch (error) {
+      console.error(`  ${progress} Error: ${error.message}`);
+      // Continue with next snapshot
+      await sleep(DELAY_MS);
+    }
+  }
+
+  console.log();
+  console.log('='.repeat(60));
+  console.log(`Processed ${versions.length} versions, found ${changes.length} changes`);
+  console.log('='.repeat(60));
+
+  // Update metadata with historical versions
+  const metadata = await loadMetadata();
+  const existingHashes = new Set(metadata.versions.map(v => v.hash));
+
+  let addedCount = 0;
+  for (const version of versions) {
+    if (!existingHashes.has(version.hash)) {
+      // Insert at beginning (historical versions come first)
+      metadata.versions.unshift(version);
+      addedCount++;
+    }
+  }
+
+  // Sort by timestamp
+  metadata.versions.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  await saveMetadata(metadata);
+  console.log(`Added ${addedCount} new versions to metadata`);
+
+  // Update changelog with historical changes
+  if (changes.length > 0) {
+    await updateChangelogWithHistory(changes, versions[0]);
+  }
+
+  console.log();
+  console.log('Backfill complete!');
+}
+
+/**
+ * Update changelog with historical changes
+ */
+async function updateChangelogWithHistory(changes, initialVersion) {
+  console.log('Updating changelog with historical changes...');
+
+  // Build changelog entries for historical changes
+  let historicalEntries = `
+## Historical Changes (from Wayback Machine)
+
+The following changes were detected by analyzing archived snapshots.
+
+---
+`;
+
+  // Add initial version entry
+  historicalEntries += `
+## ${initialVersion.timestamp} (Initial - Archived)
+
+**Version:** \`${initialVersion.hash}\`
+
+First archived snapshot of the constitution.
+
+---
+`;
+
+  // Add each change (in chronological order)
+  for (const change of changes) {
+    historicalEntries += `
+## ${change.timestamp} (Archived)
+
+**Version:** \`${change.hash}\`
+
+### Statistics
+- Lines added: ${change.diffSummary.linesAdded}
+- Lines removed: ${change.diffSummary.linesRemoved}
+
+`;
+
+    if (change.diffSummary.addedPreview.length > 0) {
+      historicalEntries += '### Sample of additions\n';
+      for (const line of change.diffSummary.addedPreview.slice(0, 3)) {
+        if (line.trim()) {
+          const preview = line.length > 200 ? line.slice(0, 200) + '...' : line;
+          historicalEntries += `> ${preview}\n`;
+        }
+      }
+      historicalEntries += '\n';
+    }
+
+    if (change.diffSummary.removedPreview.length > 0) {
+      historicalEntries += '### Sample of removals\n';
+      for (const line of change.diffSummary.removedPreview.slice(0, 3)) {
+        if (line.trim()) {
+          const preview = line.length > 200 ? line.slice(0, 200) + '...' : line;
+          historicalEntries += `> ~~${preview}~~\n`;
+        }
+      }
+      historicalEntries += '\n';
+    }
+
+    historicalEntries += '---\n';
+  }
+
+  // Read existing changelog
+  let existing = '';
+  try {
+    existing = await fs.readFile(CHANGELOG_FILE, 'utf-8');
+  } catch {
+    // No existing changelog
+  }
+
+  // Insert historical entries after the header but before live entries
+  let newContent;
+  if (existing && existing.includes('---')) {
+    const parts = existing.split('---');
+    const header = parts[0] + '---\n';
+    const rest = parts.slice(1).join('---');
+
+    // Check if we already have historical section
+    if (existing.includes('Historical Changes (from Wayback Machine)')) {
+      console.log('Historical section already exists, skipping changelog update');
+      return;
+    }
+
+    newContent = header + historicalEntries + '\n## Live Monitoring\n\nChanges detected by automated daily monitoring:\n\n---' + rest;
+  } else {
+    const header = `# Anthropic Constitution Changelog
+
+This file tracks all detected changes to [Anthropic's Constitution](https://www.anthropic.com/constitution).
+
+---
+`;
+    newContent = header + historicalEntries;
+  }
+
+  await fs.writeFile(CHANGELOG_FILE, newContent);
+  console.log('Changelog updated with historical changes');
+}
+
+// Run backfill
+backfill().catch(err => {
+  console.error('Backfill failed:', err);
+  process.exit(1);
+});
