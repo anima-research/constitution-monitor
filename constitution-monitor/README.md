@@ -1,110 +1,113 @@
 # Constitution Monitor
 
-A simple tool that monitors [Anthropic's Constitution](https://www.anthropic.com/constitution) for changes and maintains a changelog.
+A web app that monitors [Anthropic's Constitution](https://www.anthropic.com/constitution) for changes and displays a changelog.
 
-## What it does
+## Features
 
-- **Daily monitoring**: Fetches the constitution page daily via GitHub Actions
-- **Change detection**: Compares current content against the last stored version
-- **Version history**: Stores each version with timestamps in `versions/`
-- **Changelog**: Maintains a human-readable [CHANGELOG.md](CHANGELOG.md) with all changes
-- **Diff files**: Generates unified diffs showing exactly what changed
-- **Notifications**: Creates a GitHub Issue when changes are detected
-- **LLM summaries** (optional): Uses Claude to generate human-readable change summaries
+- **Web dashboard** showing the full changelog history
+- **Daily monitoring** via GitHub Actions
+- **Change detection** with diff generation
+- **Version history** stored in `versions/`
+- **Notifications** via GitHub Issues when changes detected
+- **LLM summaries** (optional) using Claude API
+- **Railway-ready** for easy deployment
+
+## Quick Deploy to Railway
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
+
+1. Click the button above or go to [Railway](https://railway.app)
+2. Create a new project from this GitHub repo
+3. Railway will auto-detect Node.js and deploy
+4. Add environment variables (optional):
+   - `ANTHROPIC_API_KEY` - For AI-generated change summaries
+   - `MONITOR_API_KEY` - To protect the trigger endpoint
 
 ## Setup
 
-### 1. Fork or clone this repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/constitution-monitor.git
-cd constitution-monitor
-```
-
-### 2. Enable GitHub Actions
-
-Go to your repository's **Settings → Actions → General** and ensure Actions are enabled.
-
-### 3. (Optional) Add Anthropic API key for LLM summaries
-
-To get AI-generated summaries of changes:
-
-1. Go to **Settings → Secrets and variables → Actions**
-2. Click **New repository secret**
-3. Name: `ANTHROPIC_API_KEY`
-4. Value: Your Anthropic API key
-
-Without this, the monitor still works but won't generate natural language summaries.
-
-### 4. Run initial snapshot
-
-Either:
-- Wait for the scheduled run (9 AM UTC daily), or
-- Go to **Actions → Monitor Constitution → Run workflow** to trigger manually
-
-The first run captures the initial snapshot. Subsequent runs will detect changes.
-
-## Repository Structure
-
-```
-constitution-monitor/
-├── monitor.py           # Main monitoring script
-├── requirements.txt     # Python dependencies
-├── CHANGELOG.md         # Human-readable changelog (auto-updated)
-├── versions/            # Stored versions and diffs
-│   ├── latest.txt       # Most recent version
-│   ├── metadata.json    # Version metadata
-│   ├── YYYY-MM-DD_*.txt # Timestamped versions
-│   └── YYYY-MM-DD_*.diff # Change diffs
-└── .github/
-    └── workflows/
-        └── monitor.yml  # GitHub Actions workflow
-```
-
-## Notifications
-
-When changes are detected, the workflow:
-
-1. **Creates a GitHub Issue** with the change summary
-2. **Commits the changes** to the repository
-
-To get email notifications:
-- Go to **Settings → Notifications** on GitHub
-- Ensure you're watching the repository
-- Enable notifications for Issues
-
-### Alternative notification methods
-
-You can modify `.github/workflows/monitor.yml` to add:
-- **Slack**: Use `slackapi/slack-github-action`
-- **Discord**: Use `sarisia/actions-status-discord`
-- **Email**: Use `dawidd6/action-send-mail`
-- **Webhook**: Use `joelwmale/webhook-action`
-
-## Running locally
+### Local Development
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+npm install
 
-# Run the monitor
-python monitor.py
+# Start the server
+npm run dev
 
-# With LLM summaries
-ANTHROPIC_API_KEY=your_key python monitor.py
+# Open http://localhost:3000
 ```
 
-## How it works
+### GitHub Actions Setup
 
-1. Fetches the constitution page using `requests`
-2. Extracts text content using BeautifulSoup (strips navigation, scripts, etc.)
-3. Compares SHA-256 hash with the previous version
-4. If changed:
-   - Generates a unified diff
-   - Saves the new version with timestamp
-   - Updates CHANGELOG.md
-   - (Optional) Generates LLM summary via Claude API
-5. GitHub Actions commits changes and creates notification issue
+The monitor runs daily via GitHub Actions:
+
+1. Fork/clone this repository
+2. Enable GitHub Actions in **Settings > Actions > General**
+3. (Optional) Add secrets:
+   - `ANTHROPIC_API_KEY` - For AI summaries
+
+The workflow will:
+- Run daily at 9 AM UTC
+- Check for changes and update `versions/` and `CHANGELOG.md`
+- Create a GitHub Issue if changes are detected
+- Commit and push updates automatically
+
+## Project Structure
+
+```
+constitution-monitor/
+├── src/
+│   ├── server.js      # Express web server
+│   ├── monitor.js     # Core monitoring logic
+│   └── cli.js         # CLI for GitHub Actions
+├── public/
+│   └── index.html     # Web frontend
+├── versions/          # Stored versions and diffs
+├── CHANGELOG.md       # Human-readable changelog
+├── package.json
+├── railway.json       # Railway config
+└── .github/
+    └── workflows/
+        └── monitor.yml
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web dashboard |
+| `/api/changelog` | GET | Get changelog as markdown |
+| `/api/versions` | GET | List all stored versions |
+| `/api/versions/:hash` | GET | Get specific version content |
+| `/api/monitor` | POST | Trigger a monitor run (requires API key) |
+| `/api/health` | GET | Health check |
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Server port (default: 3000) |
+| `ANTHROPIC_API_KEY` | No | Claude API key for AI summaries |
+| `MONITOR_API_KEY` | No | API key to protect `/api/monitor` endpoint |
+
+## How It Works
+
+1. **Fetch**: Downloads the constitution page
+2. **Parse**: Extracts text content using Cheerio
+3. **Compare**: Checks SHA-256 hash against last version
+4. **Diff**: If changed, generates unified diff
+5. **Store**: Saves new version with timestamp
+6. **Changelog**: Updates CHANGELOG.md
+7. **Notify**: Creates GitHub Issue (via Actions)
+
+## Notifications
+
+When changes are detected, GitHub Actions creates an issue. To get notified:
+
+1. **Watch the repository** on GitHub
+2. **Enable notifications** for Issues in your GitHub settings
+
+You'll receive an email whenever the constitution changes.
 
 ## License
 
