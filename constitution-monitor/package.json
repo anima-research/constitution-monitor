@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "monitor": "node src/cli.js"
+    "monitor": "node src/cli.js",
+    "backfill": "node src/backfill.js"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -11,6 +11,7 @@ A web app that monitors [Anthropic's Constitution](https://www.anthropic.com/con
 - **Notifications** via GitHub Issues when changes detected
 - **LLM summaries** (optional) using Claude API
 - **Railway-ready** for easy deployment
+- **Historical backfill** from Wayback Machine archives
 
 ## Quick Deploy to Railway
 
@@ -59,7 +60,8 @@ constitution-monitor/
 ├── src/
 │   ├── server.js      # Express web server
 │   ├── monitor.js     # Core monitoring logic
-│   └── cli.js         # CLI for GitHub Actions
+│   ├── cli.js         # CLI for GitHub Actions
+│   └── backfill.js    # Wayback Machine historical import
 ├── public/
 │   └── index.html     # Web frontend
 ├── versions/          # Stored versions and diffs
@@ -89,6 +91,24 @@ constitution-monitor/
 | `PORT` | No | Server port (default: 3000) |
 | `ANTHROPIC_API_KEY` | No | Claude API key for AI summaries |
 | `MONITOR_API_KEY` | No | API key to protect `/api/monitor` endpoint |
+
+## Historical Backfill
+
+Import historical versions from the Wayback Machine:
+
+```bash
+npm run backfill
+```
+
+This will:
+1. Query the Wayback Machine CDX API for all archived snapshots
+2. Select one snapshot per calendar day
+3. Fetch and parse each snapshot (stripping Wayback Machine UI)
+4. Compare consecutive versions and detect changes
+5. Save all versions and diffs to `versions/`
+6. Update the changelog with historical changes
+
+The backfill is rate-limited to be respectful to archive.org servers.
 
 ## How It Works
 
