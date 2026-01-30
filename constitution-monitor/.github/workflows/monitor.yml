@@ -23,20 +23,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.11'
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4
+        run: npm ci
 
       - name: Run monitor
         id: monitor
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python monitor.py
+        run: npm run monitor
 
       - name: Commit changes
         if: steps.monitor.outputs.changed == 'true'
@@ -44,7 +44,7 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add -A
-          git diff --staged --quiet || git commit -m "🔄 Constitution update detected - $(date -u +%Y-%m-%d)"
+          git diff --staged --quiet || git commit -m "Update constitution snapshot - $(date -u +%Y-%m-%d)"
 
       - name: Push changes
         if: steps.monitor.outputs.changed == 'true'
@@ -60,7 +60,7 @@ jobs:
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🔔 Constitution Changed - ${new Date().toISOString().split('T')[0]}`,
+              title: `Constitution Changed - ${new Date().toISOString().split('T')[0]}`,
               body: `## Constitution Change Detected
 
             A change has been detected in [Anthropic's Constitution](https://www.anthropic.com/constitution).
