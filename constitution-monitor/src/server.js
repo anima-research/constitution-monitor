@@ -1,11 +1,57 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
 import { runMonitor, getChangelog, getVersions, getVersion, getDiff } from './monitor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const VERSIONS_DIR = path.join(__dirname, '..', 'versions');
+const SEED_DIR = path.join(__dirname, '..', 'seed-data');
+
+/**
+ * Seed the versions directory from seed-data if empty (for fresh volume mounts)
+ */
+async function seedVersionsIfEmpty() {
+  try {
+    // Check if versions directory exists and has metadata.json
+    try {
+      await fs.access(path.join(VERSIONS_DIR, 'metadata.json'));
+      console.log('Versions directory already has data, skipping seed');
+      return;
+    } catch {
+      // metadata.json doesn't exist, need to seed
+    }
+
+    // Check if seed data exists
+    try {
+      await fs.access(SEED_DIR);
+    } catch {
+      console.log('No seed data found, starting fresh');
+      return;
+    }
+
+    console.log('Seeding versions directory from seed-data...');
+
+    // Ensure versions directory exists
+    await fs.mkdir(VERSIONS_DIR, { recursive: true });
+
+    // Copy all files from seed-data to versions
+    const files = await fs.readdir(SEED_DIR);
+    for (const file of files) {
+      const src = path.join(SEED_DIR, file);
+      const dest = path.join(VERSIONS_DIR, file);
+      await fs.copyFile(src, dest);
+      console.log(`  Seeded: ${file}`);
+    }
+
+    console.log(`Seeding complete: ${files.length} files copied`);
+  } catch (error) {
+    console.error('Error seeding versions:', error.message);
+  }
+}
 
 // Middleware
 app.use(express.json());
@@ -108,6 +154,11 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`Constitution Monitor running on http://localhost:${PORT}`);
-});
+async function start() {
+  await seedVersionsIfEmpty();
+  app.listen(PORT, () => {
+    console.log(`Constitution Monitor running on http://localhost:${PORT}`);
+  });
+}
+
+start();

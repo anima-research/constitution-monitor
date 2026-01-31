@@ -1,0 +1,52 @@
+{
+  "versions": [
+    {
+      "timestamp": "2026-01-21 16:07:47 UTC",
+      "hash": "475c01003f8a",
+      "file": "2026-01-21_16-07-47_UTC_475c01003f8a.txt",
+      "waybackTimestamp": "20260121160747"
+    },
+    {
+      "timestamp": "2026-01-22 01:48:50 UTC",
+      "hash": "763ca1f76568",
+      "file": "2026-01-22_01-48-50_UTC_763ca1f76568.txt",
+      "waybackTimestamp": "20260122014850"
+    },
+    {
+      "timestamp": "2026-01-23 00:22:18 UTC",
+      "hash": "38e06626d321",
+      "file": "2026-01-23_00-22-18_UTC_38e06626d321.txt",
+      "waybackTimestamp": "20260123002218"
+    },
+    {
+      "timestamp": "2026-01-24 23:38:38 UTC",
+      "hash": "1bcb7f585cfb",
+      "file": "2026-01-24_23-38-38_UTC_1bcb7f585cfb.txt",
+      "waybackTimestamp": "20260124233838"
+    },
+    {
+      "timestamp": "2026-01-25 20:15:48 UTC",
+      "hash": "1bcb7f585cfb",
+      "file": "2026-01-25_20-15-48_UTC_1bcb7f585cfb.txt",
+      "waybackTimestamp": "20260125201548"
+    },
+    {
+      "timestamp": "2026-01-26 12:31:24 UTC",
+      "hash": "1bcb7f585cfb",
+      "file": "2026-01-26_12-31-24_UTC_1bcb7f585cfb.txt",
+      "waybackTimestamp": "20260126123124"
+    },
+    {
+      "timestamp": "2026-01-27 16:09:23 UTC",
+      "hash": "3766eecdcac1",
+      "file": "2026-01-27_16-09-23_UTC_3766eecdcac1.txt",
+      "waybackTimestamp": "20260127160923"
+    },
+    {
+      "timestamp": "2026-01-28 19:27:51 UTC",
+      "hash": "20e28aa6aac6",
+      "file": "2026-01-28_19-27-51_UTC_20e28aa6aac6.txt",
+      "waybackTimestamp": "20260128192751"
+    }
+  ]
+}
