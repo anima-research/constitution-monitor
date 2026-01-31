@@ -380,6 +380,15 @@
       border-left: 3px solid var(--red);
     }
 
+    .diff-paragraph.removed .paragraph-content {
+      color: var(--red);
+      opacity: 0.9;
+    }
+
+    .diff-paragraph.added .paragraph-content {
+      color: var(--green);
+    }
+
     .diff-paragraph .label {
       font-size: 0.75rem;
       font-weight: 600;
@@ -670,11 +679,11 @@
 
           // For changed paragraphs, the content already has <add> and <del> tags
           // For added/removed, just show the content
-          const content = para.type === 'changed' ? para.content : para.content;
+          const content = para.content || '(empty)';
 
           return `<div class="diff-paragraph ${para.type}">
             <span class="label">${label}</span>
-            ${content}
+            <div class="paragraph-content">${content}</div>
           </div>`;
         }).join('');
 
