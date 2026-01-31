@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
-import { runMonitor, getChangelog, getVersions, getVersion, getDiff } from './monitor.js';
+import { runMonitor, getChangelog, getVersions, getVersion, getDiff, generateDiffLLMSummary } from './monitor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -136,6 +136,68 @@ app.post('/api/monitor', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Monitor error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/regenerate-summaries
+ * Regenerate LLM summaries for all diffs that are missing them
+ */
+app.post('/api/regenerate-summaries', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || req.query.key;
+  const expectedKey = process.env.MONITOR_API_KEY;
+
+  if (expectedKey && apiKey !== expectedKey) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(400).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  }
+
+  try {
+    console.log('Regenerating LLM summaries for diffs...');
+    const versions = await getVersions();
+    const results = [];
+
+    for (const version of versions) {
+      // Skip first version (no diff)
+      const versionIndex = versions.indexOf(version);
+      if (versionIndex === 0) continue;
+
+      const diffFile = path.join(VERSIONS_DIR, version.file.replace('.txt', '.diff'));
+
+      try {
+        const diffContent = await fs.readFile(diffFile, 'utf-8');
+        const diffData = JSON.parse(diffContent);
+
+        // Skip if already has a summary
+        if (diffData.summary) {
+          results.push({ hash: version.hash, status: 'skipped', reason: 'already has summary' });
+          continue;
+        }
+
+        // Generate summary
+        console.log(`  Generating summary for ${version.hash}...`);
+        const summary = await generateDiffLLMSummary(diffData.paragraphs);
+
+        if (summary) {
+          diffData.summary = summary;
+          await fs.writeFile(diffFile, JSON.stringify(diffData));
+          results.push({ hash: version.hash, status: 'updated', summary: summary.slice(0, 100) + '...' });
+        } else {
+          results.push({ hash: version.hash, status: 'failed', reason: 'no summary generated' });
+        }
+      } catch (err) {
+        results.push({ hash: version.hash, status: 'error', reason: err.message });
+      }
+    }
+
+    console.log('Summary regeneration complete');
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('Error regenerating summaries:', error);
     res.status(500).json({ error: error.message });
   }
 });

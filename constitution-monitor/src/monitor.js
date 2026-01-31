@@ -230,7 +230,7 @@ function escapeHtml(text) {
 /**
  * Generate LLM summary of changes for diff
  */
-async function generateDiffLLMSummary(paragraphs) {
+export async function generateDiffLLMSummary(paragraphs) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
