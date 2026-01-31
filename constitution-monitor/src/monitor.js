@@ -242,7 +242,7 @@ async function generateDiffLLMSummary(paragraphs) {
     return '';
   }).filter(Boolean).join('\n\n');
 
-  const prompt = `Analyze these changes to Anthropic's AI constitution and provide a brief, human-readable summary. Focus on substantive changes to principles, guidelines, or policies. Be concise (2-3 sentences max).
+  const prompt = `Analyze these changes to Anthropic's AI constitution and provide a human-readable summary. Focus on substantive changes to principles, guidelines, or policies. Even small or subtle changes can be significant—only ignore purely syntactic, grammatical, or readability changes. Explain what changed and why it might matter.
 
 CHANGES:
 ${changes.slice(0, 6000)}
@@ -259,7 +259,7 @@ Provide only the summary, no preamble.`;
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || 'claude-opus-4-5-20251101',
-        max_tokens: 300,
+        max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -356,9 +356,7 @@ async function generateLLMSummary(oldContent, newContent, diff) {
 
   console.log('Generating LLM summary...');
 
-  const prompt = `Analyze the following diff of Anthropic's AI constitution and provide a brief,
-human-readable summary of what changed. Focus on the substantive changes to principles,
-guidelines, or policies. Be concise (2-4 sentences).
+  const prompt = `Analyze the following diff of Anthropic's AI constitution and provide a human-readable summary of what changed. Focus on substantive changes to principles, guidelines, or policies. Even small or subtle changes can be significant—only ignore purely syntactic, grammatical, or readability changes. Explain what changed and why it might matter.
 
 DIFF:
 ${diff.slice(0, 8000)}
@@ -375,7 +373,7 @@ Provide only the summary, no preamble.`;
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || 'claude-opus-4-5-20251101',
-        max_tokens: 500,
+        max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }]
       })
     });
