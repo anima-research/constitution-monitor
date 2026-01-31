@@ -169,6 +169,28 @@
       letter-spacing: 0.04em; color: var(--accent); margin-bottom: 0.5rem;
     }
     .diff-summary-text { font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); }
+    .diff-summary-text h1, .diff-summary-text h2, .diff-summary-text h3 { font-size: 0.95rem; margin: 0.75rem 0 0.5rem; color: var(--text-primary); }
+    .diff-summary-text h1:first-child, .diff-summary-text h2:first-child, .diff-summary-text h3:first-child { margin-top: 0; }
+    .diff-summary-text p { margin: 0.5rem 0; }
+    .diff-summary-text ul, .diff-summary-text ol { margin: 0.5rem 0; padding-left: 1.25rem; }
+    .diff-summary-text li { margin: 0.25rem 0; }
+    .diff-summary-text strong { color: var(--accent); }
+    .diff-summary-text code { background: var(--bg-tertiary); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+
+    .changelog-summary {
+      background: linear-gradient(135deg, rgba(212,165,116,0.08) 0%, rgba(212,165,116,0.03) 100%);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      margin: 0.75rem 0;
+      font-size: 0.85rem;
+    }
+    .changelog-summary h1, .changelog-summary h2, .changelog-summary h3 { font-size: 0.9rem; margin: 0.5rem 0 0.35rem; color: var(--text-primary); }
+    .changelog-summary h1:first-child, .changelog-summary h2:first-child, .changelog-summary h3:first-child { margin-top: 0; }
+    .changelog-summary p { margin: 0.35rem 0; color: var(--text-secondary); }
+    .changelog-summary ul, .changelog-summary ol { margin: 0.35rem 0; padding-left: 1.25rem; color: var(--text-secondary); }
+    .changelog-summary li { margin: 0.2rem 0; }
+    .changelog-summary strong { color: var(--accent); }
 
     .diff-empty, .diff-loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
     .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
@@ -296,6 +318,24 @@
 
         // Load diff stats for all versions
         await loadDiffStats(versions);
+
+        // Inject summaries into changelog after loading diff stats
+        changelogEl.querySelectorAll('.view-diff-link').forEach(link => {
+          const hash = link.dataset.hash;
+          const stats = diffStats[hash];
+          if (stats && stats.summary) {
+            const summaryDiv = document.createElement('div');
+            summaryDiv.className = 'changelog-summary';
+            summaryDiv.innerHTML = marked.parse(stats.summary);
+            // Insert after the parent paragraph containing the link
+            const parent = link.closest('p') || link.parentElement;
+            if (parent && parent.nextSibling) {
+              parent.parentElement.insertBefore(summaryDiv, parent.nextSibling);
+            } else if (parent) {
+              parent.parentElement.appendChild(summaryDiv);
+            }
+          }
+        });
 
         // Render nav list
         renderNavList();
@@ -430,7 +470,7 @@
         if (summary) {
           html += `<div class="diff-summary">
             <div class="diff-summary-label">AI Summary</div>
-            <div class="diff-summary-text">${escapeHtml(summary)}</div>
+            <div class="diff-summary-text">${marked.parse(summary)}</div>
           </div>`;
         }
 
