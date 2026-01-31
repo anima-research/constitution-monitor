@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import * as cheerio from 'cheerio';
+import * as Diff from 'diff';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.join(__dirname, '..');
@@ -38,15 +39,20 @@ export async function fetchConstitution() {
   // Get main content
   const mainContent = $('article').length ? $('article') : ($('main').length ? $('main') : $('body'));
 
-  // Extract text with structure preserved
+  // Add spaces after block elements to prevent word concatenation
+  mainContent.find('p, div, li, h1, h2, h3, h4, h5, h6, br, td, th, dt, dd, section, article').each(function() {
+    $(this).append(' ');
+  });
+
+  // Extract text
   let text = mainContent.text();
 
-  // Clean up whitespace
-  const lines = text.split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+  // Clean up whitespace - normalize all whitespace to single spaces
+  text = text
+    .replace(/\s+/g, ' ')  // Collapse all whitespace to single space
+    .trim();
 
-  return lines.join('\n\n');
+  return text;
 }
 
 /**
@@ -87,32 +93,186 @@ export async function getLatestVersion() {
 }
 
 /**
- * Generate a unified diff between old and new content
+ * Normalize word for comparison: lowercase, remove punctuation
  */
-export function generateDiff(oldContent, newContent) {
-  const oldLines = oldContent.split('\n');
-  const newLines = newContent.split('\n');
+function normalizeWord(word) {
+  return word.toLowerCase().replace(/[^\w]/g, '');
+}
 
-  const diff = [];
-  diff.push('--- previous');
-  diff.push('+++ current');
+/**
+ * Split text into paragraphs based on sentence boundaries
+ */
+function splitIntoParagraphs(text) {
+  // Split on period/exclamation/question followed by space and capital letter
+  // This keeps sentences together as natural paragraphs
+  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
 
-  // Simple line-by-line diff
-  const maxLen = Math.max(oldLines.length, newLines.length);
-  let contextStart = -1;
-  let changes = [];
+  // Group sentences into ~500 char paragraphs
+  const paragraphs = [];
+  let current = '';
 
-  for (let i = 0; i < maxLen; i++) {
-    const oldLine = oldLines[i] || '';
-    const newLine = newLines[i] || '';
+  for (const sentence of sentences) {
+    if (current.length + sentence.length > 500 && current.length > 0) {
+      paragraphs.push(current.trim());
+      current = sentence;
+    } else {
+      current += (current ? ' ' : '') + sentence;
+    }
+  }
+  if (current.trim()) {
+    paragraphs.push(current.trim());
+  }
 
-    if (oldLine !== newLine) {
-      if (oldLine) changes.push(`- ${oldLine}`);
-      if (newLine) changes.push(`+ ${newLine}`);
+  return paragraphs.length > 0 ? paragraphs : [text];
+}
+
+/**
+ * Get normalized version of paragraph for matching
+ */
+function normalizeForMatching(text) {
+  return text.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Find the best matching paragraph from a list using normalized comparison
+ */
+function findBestMatch(para, paragraphs, usedIndices) {
+  let bestScore = 0;
+  let bestIndex = -1;
+
+  const paraNorm = normalizeForMatching(para);
+  const paraWords = new Set(paraNorm.split(' '));
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    if (usedIndices.has(i)) continue;
+
+    const otherNorm = normalizeForMatching(paragraphs[i]);
+    const otherWords = new Set(otherNorm.split(' '));
+    const intersection = [...paraWords].filter(w => otherWords.has(w)).length;
+    const union = new Set([...paraWords, ...otherWords]).size;
+    const score = intersection / union;
+
+    if (score > bestScore && score > 0.3) {
+      bestScore = score;
+      bestIndex = i;
     }
   }
 
-  return [...diff, ...changes].join('\n');
+  return { index: bestIndex, score: bestScore };
+}
+
+/**
+ * Generate inline diff between two paragraphs, preserving original text
+ * but ignoring whitespace/case/punctuation differences
+ */
+function diffParagraphs(oldPara, newPara) {
+  // Use word-level diff with custom comparator
+  const oldWords = oldPara.split(/(\s+)/); // Keep whitespace as separate tokens
+  const newWords = newPara.split(/(\s+)/);
+
+  const changes = Diff.diffArrays(oldWords, newWords, {
+    comparator: (a, b) => normalizeWord(a) === normalizeWord(b)
+  });
+
+  let html = '';
+  let hasRealChanges = false;
+  let unchangedChars = 0;
+  let totalChars = 0;
+
+  for (const part of changes) {
+    const text = part.value.join('');
+    const trimmedLen = text.replace(/\s+/g, '').length;
+
+    if (part.added) {
+      if (text.trim()) {
+        html += `<add>${escapeHtml(text)}</add>`;
+        hasRealChanges = true;
+        totalChars += trimmedLen;
+      } else {
+        html += text;
+      }
+    } else if (part.removed) {
+      if (text.trim()) {
+        html += `<del>${escapeHtml(text)}</del>`;
+        hasRealChanges = true;
+        totalChars += trimmedLen;
+      }
+    } else {
+      html += escapeHtml(text);
+      unchangedChars += trimmedLen;
+      totalChars += trimmedLen;
+    }
+  }
+
+  // If more than 50% of content changed, treat as replacement
+  const unchangedRatio = totalChars > 0 ? unchangedChars / totalChars : 1;
+  const isReplacement = hasRealChanges && unchangedRatio < 0.5;
+
+  return {
+    type: isReplacement ? 'replaced' : 'changed',
+    html,
+    hasChanges: hasRealChanges,
+    oldContent: escapeHtml(oldPara),
+    newContent: escapeHtml(newPara)
+  };
+}
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Generate a structured diff with paragraphs and inline changes
+ * Preserves original formatting, only ignores whitespace/case/punctuation for comparison
+ */
+export function generateDiff(oldContent, newContent) {
+  const oldParas = splitIntoParagraphs(oldContent);
+  const newParas = splitIntoParagraphs(newContent);
+
+  const result = [];
+  const usedOld = new Set();
+
+  // Match and diff paragraphs
+  for (let i = 0; i < newParas.length; i++) {
+    const newPara = newParas[i];
+    const match = findBestMatch(newPara, oldParas, usedOld);
+
+    if (match.index >= 0) {
+      usedOld.add(match.index);
+      const oldPara = oldParas[match.index];
+
+      const diffResult = diffParagraphs(oldPara, newPara);
+
+      if (diffResult.hasChanges) {
+        if (diffResult.type === 'replaced') {
+          result.push({
+            type: 'replaced',
+            oldContent: diffResult.oldContent,
+            newContent: diffResult.newContent
+          });
+        } else {
+          result.push({ type: 'changed', content: diffResult.html });
+        }
+      }
+    } else {
+      result.push({ type: 'added', content: escapeHtml(newPara) });
+    }
+  }
+
+  // Find removed paragraphs
+  for (let i = 0; i < oldParas.length; i++) {
+    if (!usedOld.has(i)) {
+      result.push({ type: 'removed', content: escapeHtml(oldParas[i]) });
+    }
+  }
+
+  return JSON.stringify(result);
 }
 
 /**
@@ -415,5 +575,42 @@ export async function getVersion(hash) {
     return { ...version, content };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Get diff for a specific version
+ */
+export async function getDiff(hash) {
+  const metadata = await loadMetadata();
+  const versionIndex = metadata.versions.findIndex(v => v.hash === hash);
+
+  if (versionIndex === -1) return null;
+
+  const version = metadata.versions[versionIndex];
+
+  // Try to find the diff file
+  const diffFileName = version.file.replace('.txt', '.diff');
+  const diffPath = path.join(VERSIONS_DIR, diffFileName);
+
+  try {
+    const diff = await fs.readFile(diffPath, 'utf-8');
+    return { ...version, diff };
+  } catch {
+    // No diff file - might be the first version or diff wasn't saved
+    // Try to compute diff from previous version
+    if (versionIndex === 0) {
+      return { ...version, diff: null, message: 'Initial version - no previous version to diff against' };
+    }
+
+    const prevVersion = metadata.versions[versionIndex - 1];
+    try {
+      const currentContent = await fs.readFile(path.join(VERSIONS_DIR, version.file), 'utf-8');
+      const prevContent = await fs.readFile(path.join(VERSIONS_DIR, prevVersion.file), 'utf-8');
+      const computedDiff = generateDiff(prevContent, currentContent);
+      return { ...version, diff: computedDiff, computed: true };
+    } catch {
+      return { ...version, diff: null, message: 'Could not load version files' };
+    }
   }
 }

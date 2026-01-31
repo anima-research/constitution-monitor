@@ -208,6 +208,251 @@
       text-align: center;
     }
 
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tab {
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .tab.active {
+      background: var(--accent-dim);
+      color: var(--bg-primary);
+      border-color: var(--accent);
+    }
+
+    /* Version list */
+    .versions-panel {
+      display: none;
+    }
+
+    .versions-panel.active {
+      display: block;
+    }
+
+    .version-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .version-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .version-item:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-dim);
+    }
+
+    .version-item.active {
+      border-color: var(--accent);
+      background: var(--bg-tertiary);
+    }
+
+    .version-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .version-date {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .version-hash {
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+    }
+
+    .version-badge {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    .version-badge.initial {
+      background: rgba(74, 222, 128, 0.1);
+      color: var(--green);
+    }
+
+    .version-badge.changed {
+      background: rgba(212, 165, 116, 0.1);
+      color: var(--accent);
+    }
+
+    /* Diff viewer */
+    .diff-viewer {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .diff-header {
+      padding: 1rem;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .diff-title {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .diff-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+      padding: 0.25rem;
+    }
+
+    .diff-close:hover {
+      color: var(--text-primary);
+    }
+
+    .diff-content {
+      padding: 1rem;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .diff-paragraph {
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 8px;
+      line-height: 1.7;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 0.95rem;
+    }
+
+    .diff-paragraph.changed {
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--accent);
+    }
+
+    .diff-paragraph.added {
+      background: rgba(74, 222, 128, 0.08);
+      border-left: 3px solid var(--green);
+    }
+
+    .diff-paragraph.removed {
+      background: rgba(248, 113, 113, 0.08);
+      border-left: 3px solid var(--red);
+    }
+
+    .diff-paragraph .label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    .diff-paragraph.changed .label { color: var(--accent); }
+    .diff-paragraph.added .label { color: var(--green); }
+    .diff-paragraph.removed .label { color: var(--red); }
+    .diff-paragraph.replaced .label { color: var(--accent); }
+
+    .diff-paragraph.replaced {
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--accent);
+    }
+
+    .diff-paragraph.replaced .old-content {
+      background: rgba(248, 113, 113, 0.08);
+      padding: 0.75rem;
+      border-radius: 6px;
+      margin-bottom: 0.75rem;
+      border-left: 2px solid var(--red);
+    }
+
+    .diff-paragraph.replaced .new-content {
+      background: rgba(74, 222, 128, 0.08);
+      padding: 0.75rem;
+      border-radius: 6px;
+      border-left: 2px solid var(--green);
+    }
+
+    .diff-paragraph.replaced .content-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+      display: block;
+    }
+
+    .diff-paragraph.replaced .old-content .content-label { color: var(--red); }
+    .diff-paragraph.replaced .new-content .content-label { color: var(--green); }
+
+    .diff-paragraph add {
+      background: rgba(74, 222, 128, 0.25);
+      color: var(--green);
+      padding: 0.1rem 0.25rem;
+      border-radius: 3px;
+    }
+
+    .diff-paragraph del {
+      background: rgba(248, 113, 113, 0.25);
+      color: var(--red);
+      padding: 0.1rem 0.25rem;
+      border-radius: 3px;
+      text-decoration: line-through;
+    }
+
+    .diff-empty {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+    }
+
+    .diff-loading {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-secondary);
+    }
+
     footer {
       text-align: center;
       padding: 2rem 0;
@@ -261,11 +506,31 @@
     </header>
 
     <main>
+      <div class="tabs">
+        <button class="tab active" data-tab="changelog">Changelog</button>
+        <button class="tab" data-tab="versions">Version Diffs</button>
+      </div>
+
       <div id="loading" class="loading">
         <div class="spinner"></div>
-        <p>Loading changelog...</p>
+        <p>Loading...</p>
       </div>
-      <div id="changelog" class="changelog" style="display: none;"></div>
+
+      <div id="changelog-panel" class="versions-panel active">
+        <div id="changelog" class="changelog" style="display: none;"></div>
+      </div>
+
+      <div id="versions-panel" class="versions-panel">
+        <div id="version-list" class="version-list"></div>
+        <div id="diff-viewer" class="diff-viewer" style="display: none;">
+          <div class="diff-header">
+            <span class="diff-title" id="diff-title">Diff</span>
+            <button class="diff-close" id="diff-close">&times;</button>
+          </div>
+          <div class="diff-content" id="diff-content"></div>
+        </div>
+      </div>
+
       <div id="error" class="error" style="display: none;"></div>
     </main>
 
@@ -278,10 +543,13 @@
   </div>
 
   <script>
-    async function loadChangelog() {
+    let versionsData = [];
+
+    async function loadData() {
       const loadingEl = document.getElementById('loading');
       const changelogEl = document.getElementById('changelog');
       const errorEl = document.getElementById('error');
+      const versionListEl = document.getElementById('version-list');
 
       try {
         const [changelogRes, versionsRes] = await Promise.all([
@@ -293,11 +561,33 @@
 
         const { changelog } = await changelogRes.json();
         const { versions } = await versionsRes.json();
+        versionsData = versions;
 
-        // Render markdown
+        // Render changelog
         changelogEl.innerHTML = marked.parse(changelog);
         loadingEl.style.display = 'none';
         changelogEl.style.display = 'block';
+
+        // Render version list (newest first)
+        const reversedVersions = [...versions].reverse();
+        versionListEl.innerHTML = reversedVersions.map((v, idx) => {
+          const isInitial = idx === reversedVersions.length - 1;
+          const date = new Date(v.timestamp.replace(' UTC', 'Z'));
+          const prevVersion = reversedVersions[idx + 1];
+          const hasChange = !isInitial && prevVersion && prevVersion.hash !== v.hash;
+
+          return `
+            <div class="version-item" data-hash="${v.hash}" data-initial="${isInitial}">
+              <div class="version-info">
+                <span class="version-date">${date.toLocaleString()}</span>
+                <span class="version-hash">${v.hash}</span>
+              </div>
+              <span class="version-badge ${isInitial ? 'initial' : (hasChange ? 'changed' : '')}">
+                ${isInitial ? 'Initial' : (hasChange ? 'Changed' : 'No change')}
+              </span>
+            </div>
+          `;
+        }).join('');
 
         // Update status bar
         document.getElementById('version-count').innerHTML =
@@ -311,18 +601,131 @@
         }
 
       } catch (err) {
-        console.error('Error loading changelog:', err);
+        console.error('Error loading data:', err);
         loadingEl.style.display = 'none';
-        errorEl.textContent = 'Failed to load changelog. Please try again later.';
+        errorEl.textContent = 'Failed to load data. Please try again later.';
         errorEl.style.display = 'block';
       }
     }
 
+    async function loadDiff(hash, isInitial) {
+      const diffViewer = document.getElementById('diff-viewer');
+      const diffContent = document.getElementById('diff-content');
+      const diffTitle = document.getElementById('diff-title');
+
+      diffViewer.style.display = 'block';
+      diffContent.innerHTML = '<div class="diff-loading"><div class="spinner"></div><p>Loading diff...</p></div>';
+
+      if (isInitial === 'true') {
+        diffTitle.textContent = 'Initial Version';
+        diffContent.innerHTML = '<div class="diff-empty">This is the initial version - no previous version to compare against.</div>';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/diff/${hash}`);
+        if (!res.ok) throw new Error('Failed to load diff');
+
+        const data = await res.json();
+        diffTitle.textContent = `Changes in ${hash}`;
+
+        if (!data.diff) {
+          diffContent.innerHTML = `<div class="diff-empty">${data.message || 'No diff available'}</div>`;
+          return;
+        }
+
+        // Parse structured diff
+        let paragraphs;
+        try {
+          paragraphs = JSON.parse(data.diff);
+        } catch {
+          // Fallback for old format
+          diffContent.innerHTML = `<div class="diff-paragraph"><pre>${escapeHtml(data.diff)}</pre></div>`;
+          return;
+        }
+
+        if (!paragraphs || paragraphs.length === 0) {
+          diffContent.innerHTML = '<div class="diff-empty">No changes detected.</div>';
+          return;
+        }
+
+        // Render paragraphs with inline changes
+        diffContent.innerHTML = paragraphs.map(para => {
+          if (para.type === 'replaced') {
+            return `<div class="diff-paragraph replaced">
+              <span class="label">Replaced</span>
+              <div class="old-content">
+                <span class="content-label">Before</span>
+                ${para.oldContent}
+              </div>
+              <div class="new-content">
+                <span class="content-label">After</span>
+                ${para.newContent}
+              </div>
+            </div>`;
+          }
+
+          const label = para.type === 'changed' ? 'Modified' :
+                       para.type === 'added' ? 'Added' : 'Removed';
+
+          // For changed paragraphs, the content already has <add> and <del> tags
+          // For added/removed, just show the content
+          const content = para.type === 'changed' ? para.content : para.content;
+
+          return `<div class="diff-paragraph ${para.type}">
+            <span class="label">${label}</span>
+            ${content}
+          </div>`;
+        }).join('');
+
+      } catch (err) {
+        console.error('Error loading diff:', err);
+        diffContent.innerHTML = '<div class="diff-empty">Failed to load diff.</div>';
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        const tabName = tab.dataset.tab;
+        document.querySelectorAll('.versions-panel').forEach(panel => {
+          panel.classList.remove('active');
+        });
+        document.getElementById(`${tabName}-panel`).classList.add('active');
+      });
+    });
+
+    // Version item click
+    document.getElementById('version-list').addEventListener('click', (e) => {
+      const item = e.target.closest('.version-item');
+      if (!item) return;
+
+      document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+
+      loadDiff(item.dataset.hash, item.dataset.initial);
+    });
+
+    // Close diff viewer
+    document.getElementById('diff-close').addEventListener('click', () => {
+      document.getElementById('diff-viewer').style.display = 'none';
+      document.querySelectorAll('.version-item').forEach(i => i.classList.remove('active'));
+    });
+
     // Load on page load
-    loadChangelog();
+    loadData();
 
     // Refresh every 5 minutes
-    setInterval(loadChangelog, 5 * 60 * 1000);
+    setInterval(loadData, 5 * 60 * 1000);
   </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runMonitor, getChangelog, getVersions, getVersion } from './monitor.js';
+import { runMonitor, getChangelog, getVersions, getVersion, getDiff } from './monitor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -50,6 +50,22 @@ app.get('/api/versions/:hash', async (req, res) => {
       return res.status(404).json({ error: 'Version not found' });
     }
     res.json(version);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/diff/:hash
+ * Returns the diff file for a specific version (changes from previous)
+ */
+app.get('/api/diff/:hash', async (req, res) => {
+  try {
+    const diff = await getDiff(req.params.hash);
+    if (!diff) {
+      return res.status(404).json({ error: 'Diff not found' });
+    }
+    res.json(diff);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
