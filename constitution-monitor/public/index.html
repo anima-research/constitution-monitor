@@ -157,6 +157,19 @@
     .diff-paragraph add { background: rgba(74,222,128,0.25); color: var(--green); padding: 0.05rem 0.2rem; border-radius: 2px; }
     .diff-paragraph del { background: rgba(248,113,113,0.25); color: var(--red); padding: 0.05rem 0.2rem; border-radius: 2px; text-decoration: line-through; }
 
+    .diff-summary {
+      background: linear-gradient(135deg, rgba(212,165,116,0.1) 0%, rgba(212,165,116,0.05) 100%);
+      border: 1px solid var(--accent-dim);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .diff-summary-label {
+      font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--accent); margin-bottom: 0.5rem;
+    }
+    .diff-summary-text { font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); }
+
     .diff-empty, .diff-loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
     .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -317,12 +330,14 @@
             if (res.ok) {
               const data = await res.json();
               if (data.diff) {
-                const paras = JSON.parse(data.diff);
+                const diffData = JSON.parse(data.diff);
+                const paras = Array.isArray(diffData) ? diffData : (diffData.paragraphs || []);
                 diffStats[v.hash] = {
                   added: paras.filter(p => p.type === 'added').length,
                   removed: paras.filter(p => p.type === 'removed').length,
                   modified: paras.filter(p => p.type === 'changed').length,
-                  replaced: paras.filter(p => p.type === 'replaced').length
+                  replaced: paras.filter(p => p.type === 'replaced').length,
+                  summary: diffData.summary || null
                 };
               }
             }
@@ -399,15 +414,27 @@
           return;
         }
 
-        let paragraphs;
-        try { paragraphs = JSON.parse(data.diff); } catch { paragraphs = []; }
+        let diffData;
+        try { diffData = JSON.parse(data.diff); } catch { diffData = { paragraphs: [] }; }
+
+        // Handle both old format (array) and new format (object with summary)
+        const paragraphs = Array.isArray(diffData) ? diffData : (diffData.paragraphs || []);
+        const summary = diffData.summary || null;
 
         if (!paragraphs.length) {
           diffContent.innerHTML = '<div class="diff-empty">No changes detected.</div>';
           return;
         }
 
-        diffContent.innerHTML = paragraphs.map((para, idx) => {
+        let html = '';
+        if (summary) {
+          html += `<div class="diff-summary">
+            <div class="diff-summary-label">AI Summary</div>
+            <div class="diff-summary-text">${escapeHtml(summary)}</div>
+          </div>`;
+        }
+
+        html += paragraphs.map((para, idx) => {
           if (para.type === 'replaced') {
             return `<div class="diff-paragraph replaced" id="para-${idx}">
               <span class="label">Replaced</span>
@@ -421,6 +448,8 @@
             <div class="paragraph-content">${para.content || '(empty)'}</div>
           </div>`;
         }).join('');
+
+        diffContent.innerHTML = html;
 
       } catch (err) {
         console.error('Error loading diff:', err);
@@ -476,6 +505,12 @@
     // Download buttons
     document.getElementById('download-diff').addEventListener('click', downloadDiff);
     document.getElementById('download-version').addEventListener('click', downloadVersion);
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
 
     loadData();
     setInterval(loadData, 5 * 60 * 1000);

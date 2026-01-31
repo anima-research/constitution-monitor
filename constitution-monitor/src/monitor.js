@@ -228,14 +228,59 @@ function escapeHtml(text) {
 }
 
 /**
+ * Generate LLM summary of changes for diff
+ */
+async function generateDiffLLMSummary(paragraphs) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const changes = paragraphs.map(p => {
+    if (p.type === 'added') return `ADDED: ${p.content.slice(0, 300)}`;
+    if (p.type === 'removed') return `REMOVED: ${p.content.slice(0, 300)}`;
+    if (p.type === 'replaced') return `REPLACED: "${p.oldContent.slice(0, 150)}" WITH "${p.newContent.slice(0, 150)}"`;
+    if (p.type === 'changed') return `MODIFIED: ${p.content.replace(/<[^>]+>/g, '').slice(0, 300)}`;
+    return '';
+  }).filter(Boolean).join('\n\n');
+
+  const prompt = `Analyze these changes to Anthropic's AI constitution and provide a brief, human-readable summary. Focus on substantive changes to principles, guidelines, or policies. Be concise (2-3 sentences max).
+
+CHANGES:
+${changes.slice(0, 6000)}
+
+Provide only the summary, no preamble.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!response.ok) return null;
+    const result = await response.json();
+    return result.content[0].text;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Generate a structured diff with paragraphs and inline changes
  * Preserves original formatting, only ignores whitespace/case/punctuation for comparison
  */
-export function generateDiff(oldContent, newContent) {
+export async function generateDiff(oldContent, newContent) {
   const oldParas = splitIntoParagraphs(oldContent);
   const newParas = splitIntoParagraphs(newContent);
 
-  const result = [];
+  const paragraphs = [];
   const usedOld = new Set();
 
   // Match and diff paragraphs
@@ -251,28 +296,34 @@ export function generateDiff(oldContent, newContent) {
 
       if (diffResult.hasChanges) {
         if (diffResult.type === 'replaced') {
-          result.push({
+          paragraphs.push({
             type: 'replaced',
             oldContent: diffResult.oldContent,
             newContent: diffResult.newContent
           });
         } else {
-          result.push({ type: 'changed', content: diffResult.html });
+          paragraphs.push({ type: 'changed', content: diffResult.html });
         }
       }
     } else {
-      result.push({ type: 'added', content: escapeHtml(newPara) });
+      paragraphs.push({ type: 'added', content: escapeHtml(newPara) });
     }
   }
 
   // Find removed paragraphs
   for (let i = 0; i < oldParas.length; i++) {
     if (!usedOld.has(i)) {
-      result.push({ type: 'removed', content: escapeHtml(oldParas[i]) });
+      paragraphs.push({ type: 'removed', content: escapeHtml(oldParas[i]) });
     }
   }
 
-  return JSON.stringify(result);
+  // Generate LLM summary
+  const summary = await generateDiffLLMSummary(paragraphs);
+
+  return JSON.stringify({
+    summary,
+    paragraphs
+  });
 }
 
 /**
