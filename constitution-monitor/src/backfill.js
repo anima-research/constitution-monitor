@@ -375,7 +375,7 @@ Provide only the summary, no preamble.`;
         'content-type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: process.env.ANTHROPIC_MODEL || 'claude-opus-4-5-20251101',
         max_tokens: 300,
         messages: [{ role: 'user', content: prompt }]
       })
