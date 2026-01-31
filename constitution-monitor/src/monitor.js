@@ -557,7 +557,7 @@ Initial snapshot captured. Future changes will be logged here.
   console.log('!'.repeat(60));
 
   // Generate diff
-  const diff = generateDiff(previousContent, currentContent);
+  const diff = await generateDiff(previousContent, currentContent);
   const diffSummary = generateDiffSummary(previousContent, currentContent);
 
   console.log(`\nChanges: +${diffSummary.linesAdded} / -${diffSummary.linesRemoved} lines`);
@@ -568,8 +568,15 @@ Initial snapshot captured. Future changes will be logged here.
   await fs.writeFile(diffFile, diff);
   console.log(`Saved diff: ${path.basename(diffFile)}`);
 
-  // Generate LLM summary
-  const llmSummary = await generateLLMSummary(previousContent, currentContent, diff);
+  // Extract LLM summary from diff (already generated inside generateDiff)
+  let llmSummary = null;
+  try {
+    const diffData = JSON.parse(diff);
+    llmSummary = diffData.summary;
+  } catch {
+    // Fall back to generating summary if diff parsing fails
+    llmSummary = await generateLLMSummary(previousContent, currentContent, diff);
+  }
   if (llmSummary) {
     console.log(`\nLLM Summary: ${llmSummary}`);
   }
@@ -656,7 +663,7 @@ export async function getDiff(hash) {
     try {
       const currentContent = await fs.readFile(path.join(VERSIONS_DIR, version.file), 'utf-8');
       const prevContent = await fs.readFile(path.join(VERSIONS_DIR, prevVersion.file), 'utf-8');
-      const computedDiff = generateDiff(prevContent, currentContent);
+      const computedDiff = await generateDiff(prevContent, currentContent);
       return { ...version, diff: computedDiff, computed: true };
     } catch {
       return { ...version, diff: null, message: 'Could not load version files' };
