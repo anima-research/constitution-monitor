@@ -192,6 +192,22 @@
     .changelog-summary li { margin: 0.2rem 0; }
     .changelog-summary strong { color: var(--accent); }
 
+    .changelog-entry { margin-bottom: 0.5rem; }
+    .changelog-entry h3 { font-size: 1rem; color: var(--accent); margin: 0 0 0.5rem 0; padding: 0; border: none; }
+    .changelog-entry p { margin: 0.25rem 0; }
+    .changelog-entry hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+    .badge-initial, .badge-nochange {
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 3px; margin-left: 0.5rem;
+    }
+    .badge-initial { background: rgba(74,222,128,0.15); color: var(--green); }
+    .badge-nochange { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+    .changelog-stats { font-size: 0.85rem; margin: 0.5rem 0; }
+    .stat-added { color: var(--green); margin-right: 0.75rem; }
+    .stat-removed { color: var(--red); margin-right: 0.75rem; }
+    .stat-modified { color: var(--accent); }
+
     .diff-empty, .diff-loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
     .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -277,29 +293,61 @@
       const errorEl = document.getElementById('error');
 
       try {
-        const [changelogRes, versionsRes] = await Promise.all([
-          fetch('/api/changelog'),
-          fetch('/api/versions')
-        ]);
+        const versionsRes = await fetch('/api/versions');
+        if (!versionsRes.ok) throw new Error('Failed to load versions');
 
-        if (!changelogRes.ok) throw new Error('Failed to load changelog');
-
-        const { changelog } = await changelogRes.json();
         const { versions } = await versionsRes.json();
         versionsData = versions;
 
-        // Process changelog - replace sample sections with diff links
-        let processedChangelog = changelog
-          .replace(/### Sample of additions[\s\S]*?(?=###|---|$)/g, '')
-          .replace(/### Sample of removals[\s\S]*?(?=###|---|$)/g, '');
+        // Load diff stats for all versions first
+        await loadDiffStats(versions);
 
-        // Add view diff links after version hashes
-        processedChangelog = processedChangelog.replace(
-          /\*\*Version:\*\* `([a-f0-9]+)`/g,
-          '**Version:** `$1` <a href="#" class="view-diff-link" data-hash="$1">View Diff</a>'
-        );
+        // Generate changelog from versions data (reverse chronological order)
+        const reversedVersions = [...versions].reverse();
+        let changelogHtml = '<h2>Change History</h2>';
 
-        changelogEl.innerHTML = marked.parse(processedChangelog);
+        for (let i = 0; i < reversedVersions.length; i++) {
+          const v = reversedVersions[i];
+          const isInitial = i === reversedVersions.length - 1;
+          const prevVersion = reversedVersions[i + 1];
+          const hasChange = !isInitial && prevVersion && prevVersion.hash !== v.hash;
+          const stats = diffStats[v.hash];
+          const date = new Date(v.timestamp.replace(' UTC', 'Z'));
+          const dateStr = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+          changelogHtml += `<div class="changelog-entry">`;
+          changelogHtml += `<h3>${dateStr}</h3>`;
+          changelogHtml += `<p><code>${v.hash}</code>`;
+
+          if (isInitial) {
+            changelogHtml += ` <span class="badge-initial">Initial Version</span>`;
+          } else if (!hasChange) {
+            changelogHtml += ` <span class="badge-nochange">No Change</span>`;
+          } else {
+            changelogHtml += ` <a href="#" class="view-diff-link" data-hash="${v.hash}">View Diff</a>`;
+          }
+          changelogHtml += `</p>`;
+
+          // Add stats if there were changes
+          if (stats && hasChange) {
+            const statParts = [];
+            if (stats.added) statParts.push(`<span class="stat-added">+${stats.added} added</span>`);
+            if (stats.removed) statParts.push(`<span class="stat-removed">-${stats.removed} removed</span>`);
+            if (stats.modified + stats.replaced) statParts.push(`<span class="stat-modified">~${stats.modified + stats.replaced} modified</span>`);
+            if (statParts.length) {
+              changelogHtml += `<p class="changelog-stats">${statParts.join(' ')}</p>`;
+            }
+          }
+
+          // Add summary if available
+          if (stats && stats.summary && hasChange) {
+            changelogHtml += `<div class="changelog-summary">${marked.parse(stats.summary)}</div>`;
+          }
+
+          changelogHtml += `</div><hr>`;
+        }
+
+        changelogEl.innerHTML = changelogHtml;
         loadingEl.style.display = 'none';
         changelogEl.style.display = 'block';
 
@@ -314,27 +362,6 @@
               if (navItem) navItem.click();
             }, 100);
           });
-        });
-
-        // Load diff stats for all versions
-        await loadDiffStats(versions);
-
-        // Inject summaries into changelog after loading diff stats
-        changelogEl.querySelectorAll('.view-diff-link').forEach(link => {
-          const hash = link.dataset.hash;
-          const stats = diffStats[hash];
-          if (stats && stats.summary) {
-            const summaryDiv = document.createElement('div');
-            summaryDiv.className = 'changelog-summary';
-            summaryDiv.innerHTML = marked.parse(stats.summary);
-            // Insert after the parent paragraph containing the link
-            const parent = link.closest('p') || link.parentElement;
-            if (parent && parent.nextSibling) {
-              parent.parentElement.insertBefore(summaryDiv, parent.nextSibling);
-            } else if (parent) {
-              parent.parentElement.appendChild(summaryDiv);
-            }
-          }
         });
 
         // Render nav list
