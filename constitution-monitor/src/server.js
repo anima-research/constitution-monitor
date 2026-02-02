@@ -217,11 +217,37 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
+// Daily monitor schedule
+const MONITOR_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in ms
+const STARTUP_DELAY = 60 * 1000; // 1 minute delay on startup
+
+async function runScheduledMonitor() {
+  console.log(`[${new Date().toISOString()}] Running scheduled constitution check...`);
+  try {
+    const result = await runMonitor();
+    if (result.changed) {
+      console.log(`[${new Date().toISOString()}] Changes detected! Hash: ${result.hash}`);
+    } else {
+      console.log(`[${new Date().toISOString()}] No changes detected.`);
+    }
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Scheduled monitor error:`, error.message);
+  }
+}
+
 // Start server
 async function start() {
   await seedVersionsIfEmpty();
+
   app.listen(PORT, () => {
     console.log(`Constitution Monitor running on http://localhost:${PORT}`);
+
+    // Run monitor after startup delay, then every 24 hours
+    console.log(`Scheduling daily constitution checks (first run in 1 minute)...`);
+    setTimeout(() => {
+      runScheduledMonitor();
+      setInterval(runScheduledMonitor, MONITOR_INTERVAL);
+    }, STARTUP_DELAY);
   });
 }
 
