@@ -688,6 +688,9 @@ export async function getDiff(hash) {
       const currentContent = await fs.readFile(path.join(VERSIONS_DIR, version.file), 'utf-8');
       const prevContent = await fs.readFile(path.join(VERSIONS_DIR, prevVersion.file), 'utf-8');
       const computedDiff = await generateDiff(prevContent, currentContent);
+      // Save the computed diff so we don't regenerate on every request
+      await fs.writeFile(diffPath, computedDiff);
+      console.log(`Saved computed diff: ${diffFileName}`);
       return { ...version, diff: computedDiff, computed: true };
     } catch {
       return { ...version, diff: null, message: 'Could not load version files' };
