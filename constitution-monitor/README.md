@@ -4,7 +4,7 @@ Track changes to [Anthropic's Claude Constitution](https://www.anthropic.com/con
 
 ## Live Site
 
-**[claude-soul.org](https://claude-soul.org)**
+**[claude-soul.watch](https://claude-soul.watch)**
 
 ## Features
 
