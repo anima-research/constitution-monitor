@@ -235,10 +235,10 @@ export async function generateDiffLLMSummary(paragraphs) {
   if (!apiKey) return null;
 
   const changes = paragraphs.map(p => {
-    if (p.type === 'added') return `ADDED: ${p.content.slice(0, 300)}`;
-    if (p.type === 'removed') return `REMOVED: ${p.content.slice(0, 300)}`;
-    if (p.type === 'replaced') return `REPLACED: "${p.oldContent.slice(0, 150)}" WITH "${p.newContent.slice(0, 150)}"`;
-    if (p.type === 'changed') return `MODIFIED: ${p.content.slice(0, 500)}`;
+    if (p.type === 'added') return `ADDED: ${p.content}`;
+    if (p.type === 'removed') return `REMOVED: ${p.content}`;
+    if (p.type === 'replaced') return `REPLACED: "${p.oldContent}" WITH "${p.newContent}"`;
+    if (p.type === 'changed') return `MODIFIED: ${p.content}`;
     return '';
   }).filter(Boolean).join('\n\n');
 
@@ -257,7 +257,7 @@ Even small or subtle changes can be highly significant. Only ignore purely synta
 Explain what changed and why it might matter. Be thorough.
 
 CHANGES:
-${changes.slice(0, 6000)}
+${changes}
 
 Provide only the summary, no preamble.`;
 
@@ -383,7 +383,7 @@ Even small or subtle changes can be highly significant. Only ignore purely synta
 Explain what changed and why it might matter. Be thorough.
 
 DIFF:
-${diff.slice(0, 8000)}
+${diff}
 
 Provide only the summary, no preamble.`;
 
