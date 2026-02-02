@@ -574,11 +574,35 @@
         const res = await fetch(`/api/versions/${currentHash}`);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
-        const blob = new Blob([data.content || ''], { type: 'text/plain' });
+        const content = data.content || '';
+
+        // Format content into paragraphs and create HTML
+        const paragraphs = content.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+        const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude's Constitution - ${data.timestamp || currentHash}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; max-width: 800px; margin: 0 auto; padding: 2rem; color: #333; }
+    h1 { font-size: 1.75rem; border-bottom: 2px solid #d4a574; padding-bottom: 0.5rem; }
+    p { margin: 1rem 0; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Claude's Constitution</h1>
+  <p class="meta">Version: ${currentHash} | ${data.timestamp || 'Unknown date'}</p>
+  ${paragraphs.map(p => `<p>${escapeHtml(p)}</p>`).join('\n  ')}
+</body>
+</html>`;
+
+        const blob = new Blob([htmlContent], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `version-${currentHash}.txt`;
+        a.download = `claude-constitution-${currentHash}.html`;
         a.click();
         URL.revokeObjectURL(url);
       } catch (e) {
