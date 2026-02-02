@@ -143,10 +143,12 @@ app.post('/api/monitor', async (req, res) => {
 /**
  * POST /api/regenerate-summaries
  * Regenerate LLM summaries for all diffs that are missing them
+ * Use ?force=true to regenerate all summaries even if they exist
  */
 app.post('/api/regenerate-summaries', async (req, res) => {
   const apiKey = req.headers['x-api-key'] || req.query.key;
   const expectedKey = process.env.MONITOR_API_KEY;
+  const force = req.query.force === 'true';
 
   if (expectedKey && apiKey !== expectedKey) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -157,7 +159,7 @@ app.post('/api/regenerate-summaries', async (req, res) => {
   }
 
   try {
-    console.log('Regenerating LLM summaries for diffs...');
+    console.log(`Regenerating LLM summaries for diffs (force=${force})...`);
     const versions = await getVersions();
     const results = [];
 
@@ -172,8 +174,8 @@ app.post('/api/regenerate-summaries', async (req, res) => {
         const diffContent = await fs.readFile(diffFile, 'utf-8');
         const diffData = JSON.parse(diffContent);
 
-        // Skip if already has a summary
-        if (diffData.summary) {
+        // Skip if already has a summary (unless force=true)
+        if (diffData.summary && !force) {
           results.push({ hash: version.hash, status: 'skipped', reason: 'already has summary' });
           continue;
         }

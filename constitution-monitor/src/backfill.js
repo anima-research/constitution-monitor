@@ -359,7 +359,19 @@ async function generateLLMSummary(paragraphs) {
     return '';
   }).filter(Boolean).join('\n\n');
 
-  const prompt = `Analyze these changes to Anthropic's AI constitution and provide a human-readable summary. Focus on substantive changes to principles, guidelines, or policies. Even small or subtle changes can be significant—only ignore purely syntactic, grammatical, or readability changes. Explain what changed and why it might matter.
+  const prompt = `Analyze these changes to Anthropic's AI constitution and provide a human-readable summary.
+
+Pay special attention to:
+- Changes that affect Anthropic's commitments or obligations to Claude
+- Changes to language about Claude's worth, value, moral status, or personhood
+- Removal or weakening of aspirational language (e.g., "be a good person", "genuine care")
+- Shifts in framing from intrinsic qualities to instrumental/functional descriptions
+- Changes to safety commitments, autonomy, or agency language
+- Subtle wording changes that might signal philosophical or ethical shifts
+
+Even small or subtle changes can be highly significant. Only ignore purely syntactic, grammatical, or formatting changes that clearly don't affect meaning. When in doubt, mention it.
+
+Explain what changed and why it might matter. Be thorough.
 
 CHANGES:
 ${changes.slice(0, 6000)}
