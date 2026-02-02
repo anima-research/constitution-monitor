@@ -355,7 +355,7 @@ async function generateLLMSummary(paragraphs) {
     if (p.type === 'added') return `ADDED: ${p.content.slice(0, 300)}`;
     if (p.type === 'removed') return `REMOVED: ${p.content.slice(0, 300)}`;
     if (p.type === 'replaced') return `REPLACED: "${p.oldContent.slice(0, 150)}" WITH "${p.newContent.slice(0, 150)}"`;
-    if (p.type === 'changed') return `MODIFIED: ${p.content.replace(/<[^>]+>/g, '').slice(0, 300)}`;
+    if (p.type === 'changed') return `MODIFIED: ${p.content.slice(0, 500)}`;
     return '';
   }).filter(Boolean).join('\n\n');
 
