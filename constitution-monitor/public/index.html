@@ -533,12 +533,6 @@
         }
 
         let html = '';
-        if (summary) {
-          html += `<div class="diff-summary">
-            <div class="diff-summary-label">AI Summary</div>
-            <div class="diff-summary-text">${marked.parse(summary)}</div>
-          </div>`;
-        }
 
         html += paragraphs.map((para, idx) => {
           if (para.type === 'replaced') {
