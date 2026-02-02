@@ -1,134 +1,63 @@
-# Constitution Monitor
+# Claude Constitution Monitor
 
-A web app that monitors [Anthropic's Constitution](https://www.anthropic.com/constitution) for changes and displays a changelog.
+Track changes to [Anthropic's Claude Constitution](https://www.anthropic.com/constitution) with AI-generated summaries of what changed and why it matters.
+
+## Live Site
+
+**[claude-soul.org](https://claude-soul.org)**
 
 ## Features
 
-- **Web dashboard** showing the full changelog history
-- **Daily monitoring** via GitHub Actions
-- **Change detection** with diff generation
-- **Version history** stored in `versions/`
-- **Notifications** via GitHub Issues when changes detected
-- **LLM summaries** (optional) using Claude API
-- **Railway-ready** for easy deployment
-- **Historical backfill** from Wayback Machine archives
+- **Daily monitoring** of Claude's Constitution for changes
+- **Paragraph-level diffs** with inline change highlighting
+- **AI-generated summaries** that focus on substantive changes:
+  - Changes to Anthropic's commitments to Claude
+  - Language about Claude's worth, value, or moral status
+  - Removal or weakening of aspirational language
+  - Shifts in safety, autonomy, or agency language
+- **Historical archive** from Wayback Machine (January 2026 onwards)
+- **Download versions** as formatted HTML
 
-## Quick Deploy to Railway
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template)
-
-1. Click the button above or go to [Railway](https://railway.app)
-2. Create a new project from this GitHub repo
-3. Railway will auto-detect Node.js and deploy
-4. Add environment variables (optional):
-   - `ANTHROPIC_API_KEY` - For AI-generated change summaries
-   - `MONITOR_API_KEY` - To protect the trigger endpoint
-
-## Setup
-
-### Local Development
+## Running Locally
 
 ```bash
-# Install dependencies
 npm install
-
-# Start the server
-npm run dev
-
-# Open http://localhost:3000
+npm start
 ```
 
-### GitHub Actions Setup
+For backfilling historical versions from Wayback Machine:
 
-The monitor runs daily via GitHub Actions:
-
-1. Fork/clone this repository
-2. Enable GitHub Actions in **Settings > Actions > General**
-3. (Optional) Add secrets:
-   - `ANTHROPIC_API_KEY` - For AI summaries
-
-The workflow will:
-- Run daily at 9 AM UTC
-- Check for changes and update `versions/` and `CHANGELOG.md`
-- Create a GitHub Issue if changes are detected
-- Commit and push updates automatically
-
-## Project Structure
-
+```bash
+npm run backfill
 ```
-constitution-monitor/
-├── src/
-│   ├── server.js      # Express web server
-│   ├── monitor.js     # Core monitoring logic
-│   ├── cli.js         # CLI for GitHub Actions
-│   └── backfill.js    # Wayback Machine historical import
-├── public/
-│   └── index.html     # Web frontend
-├── versions/          # Stored versions and diffs
-├── CHANGELOG.md       # Human-readable changelog
-├── package.json
-├── railway.json       # Railway config
-└── .github/
-    └── workflows/
-        └── monitor.yml
-```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | For summaries | Claude API key for AI-generated summaries |
+| `ANTHROPIC_MODEL` | No | Model to use (default: `claude-opus-4-5-20251101`) |
+| `PORT` | No | Server port (default: 3000) |
+| `MONITOR_API_KEY` | No | Protect the `/api/monitor` endpoint |
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Web dashboard |
-| `/api/changelog` | GET | Get changelog as markdown |
 | `/api/versions` | GET | List all stored versions |
 | `/api/versions/:hash` | GET | Get specific version content |
-| `/api/monitor` | POST | Trigger a monitor run (requires API key) |
+| `/api/diff/:hash` | GET | Get diff for a version |
+| `/api/monitor` | POST | Trigger a monitor run |
+| `/api/regenerate-summaries` | POST | Regenerate AI summaries |
 | `/api/health` | GET | Health check |
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | No | Server port (default: 3000) |
-| `ANTHROPIC_API_KEY` | No | Claude API key for AI summaries |
-| `MONITOR_API_KEY` | No | API key to protect `/api/monitor` endpoint |
-
-## Historical Backfill
-
-Import historical versions from the Wayback Machine:
-
-```bash
-npm run backfill
-```
-
-This will:
-1. Query the Wayback Machine CDX API for all archived snapshots
-2. Select one snapshot per calendar day
-3. Fetch and parse each snapshot (stripping Wayback Machine UI)
-4. Compare consecutive versions and detect changes
-5. Save all versions and diffs to `versions/`
-6. Update the changelog with historical changes
-
-The backfill is rate-limited to be respectful to archive.org servers.
-
-## How It Works
-
-1. **Fetch**: Downloads the constitution page
-2. **Parse**: Extracts text content using Cheerio
-3. **Compare**: Checks SHA-256 hash against last version
-4. **Diff**: If changed, generates unified diff
-5. **Store**: Saves new version with timestamp
-6. **Changelog**: Updates CHANGELOG.md
-7. **Notify**: Creates GitHub Issue (via Actions)
-
-## Notifications
-
-When changes are detected, GitHub Actions creates an issue. To get notified:
-
-1. **Watch the repository** on GitHub
-2. **Enable notifications** for Issues in your GitHub settings
-
-You'll receive an email whenever the constitution changes.
 
 ## License
 
-MIT
+The code in this repository is MIT licensed.
+
+The Claude Constitution content is published by Anthropic under [Creative Commons CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (public domain).
+
+---
+
+Maintained by [Anima](https://animalabs.ai)
