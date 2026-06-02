@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
-import { runMonitor, getChangelog, getVersions, getVersion, getDiff, generateDiffLLMSummary } from './monitor.js';
+import { runMonitor, getChangelog, getVersions, getVersion, getDiff, generateDiffLLMSummary, getRunStatus, recordRunStatus } from './monitor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -208,8 +208,9 @@ app.post('/api/regenerate-summaries', async (req, res) => {
  * GET /api/health
  * Health check endpoint
  */
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  const monitor = await getRunStatus();
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), monitor });
 });
 
 // Serve the frontend for all other routes
@@ -232,6 +233,7 @@ async function runScheduledMonitor() {
     }
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Scheduled monitor error:`, error.message);
+    await recordRunStatus({ ok: false, result: 'error', error: error.message, problems: [error.message] });
   }
 }
 

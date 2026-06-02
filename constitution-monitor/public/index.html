@@ -80,6 +80,7 @@
       background: var(--bg-secondary); padding: 0.35rem 0.7rem;
       border-radius: 20px; border: 1px solid var(--border);
     }
+    .status-item.monitor-warn { color: var(--accent); background: rgba(212,165,116,0.12); border-color: var(--accent-dim); }
 
     .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .tab {
@@ -246,6 +247,19 @@
     .loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
     .error { background: rgba(248,113,113,0.1); border: 1px solid var(--red); border-radius: 6px; padding: 1rem; color: var(--red); text-align: center; }
 
+    /* Correction banners */
+    .correction-banner { border-radius: 8px; padding: 0.85rem 1rem; margin: 0.6rem 0; border: 1px solid var(--border); }
+    .correction-banner .correction-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
+    .correction-banner .correction-body { font-size: 0.85rem; line-height: 1.55; color: var(--text-secondary); }
+    .correction-banner.critical { background: rgba(248,113,113,0.12); border-color: var(--red); }
+    .correction-banner.critical .correction-title { color: var(--red); }
+    .correction-banner.warning { background: rgba(212,165,116,0.12); border-color: var(--accent-dim); }
+    .correction-banner.warning .correction-title { color: var(--accent); }
+    .correction-banner.note { background: var(--bg-tertiary); border-color: var(--border); }
+    .correction-banner.note .correction-title { color: var(--text-primary); }
+    .nav-item-badge.corrected { background: rgba(248,113,113,0.15); color: var(--red); }
+    .nav-item-badge.note { background: var(--bg-tertiary); color: var(--text-secondary); }
+
     footer { text-align: center; padding: 1.5rem 0; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.8; }
     footer p { margin: 0.25rem 0; }
     footer a { color: var(--accent); text-decoration: none; }
@@ -277,6 +291,7 @@
       <div class="status-bar">
         <div class="status-item" id="version-count"><span>Loading...</span></div>
         <div class="status-item" id="last-check"><span>Loading...</span></div>
+        <div class="status-item monitor-warn" id="monitor-status" style="display:none;"></div>
       </div>
     </header>
 
@@ -317,7 +332,7 @@
     </main>
 
     <footer>
-      <p>Summaries by Claude Opus 4.5 — the first model trained with an early version of this constitution.</p>
+      <p>Summaries (but not the notes and corrections) by Claude Opus 4.5 — the first model trained with an early version of this constitution.</p>
       <p>Maintained by <a href="https://animalabs.ai" target="_blank">Anima</a></p>
     </footer>
   </div>
@@ -327,6 +342,39 @@
     let diffStats = {};
     let currentHash = null;
     let currentDiff = null;
+
+    // Render a correction banner from the server's corrections manifest.
+    function renderCorrectionBanner(c) {
+      if (!c) return '';
+      const sev = c.severity || 'note';
+      const icon = (sev === 'critical' || sev === 'warning') ? '⚠' : 'ℹ';
+      return `<div class="correction-banner ${sev}">
+        <div class="correction-title">${icon} ${escapeHtml(c.title || 'Correction')}</div>
+        <div class="correction-body">${escapeHtml(c.body || '')}</div>
+      </div>`;
+    }
+
+    // Surface a small flag if the latest automated check didn't complete
+    // (e.g. the monitor is skipping runs because the page structure changed).
+    // Invisible during normal operation.
+    async function checkMonitorStatus() {
+      const el = document.getElementById('monitor-status');
+      if (!el) return;
+      try {
+        const h = await (await fetch('/api/health')).json();
+        const m = h.monitor;
+        if (m && m.ok === false) {
+          const when = m.lastRunAt ? new Date(m.lastRunAt).toLocaleString() : 'unknown';
+          el.title = (m.problems && m.problems.length ? m.problems : [m.error]).filter(Boolean).join('; ');
+          el.innerHTML = `<span>⚠ Last automated check didn’t complete (${when})</span>`;
+          el.style.display = '';
+        } else {
+          el.style.display = 'none';
+        }
+      } catch {
+        el.style.display = 'none';
+      }
+    }
 
     async function loadData() {
       const loadingEl = document.getElementById('loading');
@@ -369,8 +417,18 @@
           }
           changelogHtml += `</p>`;
 
+          // Correction banner (overlaid from the server's corrections manifest).
+          // For fetch artifacts (critical/warning) the original stats + AI summary
+          // are misleading, so we suppress them; for 'note' corrections the content
+          // was fine, so we keep them alongside the note.
+          const correction = v.correction;
+          const suppressDiff = correction && (correction.severity === 'critical' || correction.severity === 'warning' || correction.hideDiff);
+          if (correction) {
+            changelogHtml += renderCorrectionBanner(correction);
+          }
+
           // Add stats if there were changes
-          if (stats && hasChange) {
+          if (stats && hasChange && !suppressDiff) {
             const statParts = [];
             if (stats.added) statParts.push(`<span class="stat-added">+${stats.added} added</span>`);
             if (stats.removed) statParts.push(`<span class="stat-removed">-${stats.removed} removed</span>`);
@@ -381,7 +439,7 @@
           }
 
           // Add summary if available
-          if (stats && stats.summary && hasChange) {
+          if (stats && stats.summary && hasChange && !suppressDiff) {
             changelogHtml += `<div class="changelog-summary">${marked.parse(stats.summary)}</div>`;
           }
 
@@ -415,6 +473,8 @@
           const lastDate = new Date(lastVersion.timestamp.replace(' UTC', 'Z'));
           document.getElementById('last-check').innerHTML = `<span>Last: ${lastDate.toLocaleDateString()}</span>`;
         }
+
+        checkMonitorStatus();
 
       } catch (err) {
         console.error('Error loading data:', err);
@@ -465,8 +525,10 @@
         const hasChange = !isInitial && prevVersion && prevVersion.hash !== v.hash;
         const stats = diffStats[v.hash];
 
+        const corr = v.correction;
+        const suppress = corr && (corr.severity === 'critical' || corr.severity === 'warning' || corr.hideDiff);
         let statsHtml = '';
-        if (stats) {
+        if (stats && !suppress) {
           const parts = [];
           if (stats.added) parts.push(`<span class="nav-stat added">+${stats.added}</span>`);
           if (stats.removed) parts.push(`<span class="nav-stat removed">-${stats.removed}</span>`);
@@ -477,6 +539,10 @@
         let badgeHtml = '';
         if (isInitial) badgeHtml = '<span class="nav-item-badge initial">Initial</span>';
         else if (!hasChange) badgeHtml = '<span class="nav-item-badge no-change">No change</span>';
+        if (v.correction) {
+          const isNote = v.correction.severity === 'note';
+          badgeHtml += `<span class="nav-item-badge ${isNote ? 'note' : 'corrected'}">${isNote ? 'Note' : 'Corrected'}</span>`;
+        }
 
         return `
           <div class="nav-item" data-hash="${v.hash}" data-initial="${isInitial}">
@@ -516,9 +582,20 @@
         const data = await res.json();
         currentDiff = data.diff;
         diffTitle.textContent = `Changes in ${hash}`;
+        const correction = data.correction;
 
         if (!data.diff) {
-          diffContent.innerHTML = `<div class="diff-empty">${data.message || 'No diff available'}</div>`;
+          diffContent.innerHTML = renderCorrectionBanner(correction) + `<div class="diff-empty">${data.message || 'No diff available'}</div>`;
+          return;
+        }
+
+        // For corrected entries (fetch artifacts / re-scan), the line-by-line diff
+        // reflects the monitoring issue, not real edits — so don't render the
+        // misleading paragraph list. Show the note; the raw diff stays downloadable.
+        const suppress = correction && (correction.severity === 'critical' || correction.severity === 'warning' || correction.hideDiff);
+        if (suppress) {
+          diffContent.innerHTML = renderCorrectionBanner(correction) +
+            `<div class="diff-empty">The line-by-line comparison isn’t shown for this entry, because it reflects the issue described in the note above — not edits to the constitution itself. You can still use “Download Diff” to inspect the raw data.</div>`;
           return;
         }
 
@@ -530,11 +607,11 @@
         const summary = diffData.summary || null;
 
         if (!paragraphs.length) {
-          diffContent.innerHTML = '<div class="diff-empty">No changes detected.</div>';
+          diffContent.innerHTML = renderCorrectionBanner(correction) + '<div class="diff-empty">No changes detected.</div>';
           return;
         }
 
-        let html = '';
+        let html = renderCorrectionBanner(correction);
 
         html += paragraphs.map((para, idx) => {
           if (para.type === 'replaced') {

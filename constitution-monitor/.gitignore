@@ -21,3 +21,6 @@ npm-debug.log*
 
 # Build
 dist/
+
+# Operational run status (runtime only — not part of the tracked history)
+versions/monitor-status.json

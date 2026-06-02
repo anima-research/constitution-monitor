@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import * as cheerio from 'cheerio';
 import * as Diff from 'diff';
+import { getCorrection } from './corrections.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.join(__dirname, '..');
@@ -11,11 +12,185 @@ const VERSIONS_DIR = path.join(ROOT_DIR, 'versions');
 const CHANGELOG_FILE = path.join(ROOT_DIR, 'CHANGELOG.md');
 const LATEST_FILE = path.join(VERSIONS_DIR, 'latest.txt');
 const METADATA_FILE = path.join(VERSIONS_DIR, 'metadata.json');
+// Operational run status (NOT committed to git — see .gitignore). Lets us tell
+// whether the monitor is healthy vs. silently skipping runs (e.g. if the page
+// is restructured again), rather than only finding out from logs.
+const STATUS_FILE = path.join(VERSIONS_DIR, 'monitor-status.json');
 
 const CONSTITUTION_URL = 'https://www.anthropic.com/constitution';
 
+// ---------------------------------------------------------------------------
+// Content validation
+//
+// The PRIMARY guard against recording a broken read is structural: the new
+// extractor (below) reads the structured Sanity document, so a fetch either
+// yields the whole `featureClaudeConstitution` document or fetchConstitution()
+// throws. The "got half the page" partial read that caused the 2026-05-11
+// false "constitution removed" alarm (an artifact of the old DOM scraper)
+// cannot recur with structured extraction.
+//
+// This check is therefore only a lightweight backstop against the one
+// remaining failure mode: a structurally-valid but GUTTED read (e.g. a CMS
+// hiccup that returns an empty `chapters` array). A generous length floor
+// catches that — the real document is ~190k chars, and without the body
+// chapters it would be ~30k. We deliberately do NOT validate specific prose
+// (landmark phrases) or relative size: those would risk rejecting a genuine
+// edit (a reworded section, a real trim) as "incomplete", silently pausing
+// tracking — the wrong failure for a change monitor. We treat an actual mass
+// deletion of the constitution as implausible.
+// ---------------------------------------------------------------------------
+const MIN_CONTENT_LENGTH = 80000;
+
 /**
- * Fetch the constitution page and extract text content
+ * Lightweight sanity check that a successful extraction isn't empty/gutted.
+ * Returns { valid, problems }. Never throws.
+ */
+export function validateConstitutionContent(content) {
+  const problems = [];
+  if (!content || content.length < MIN_CONTENT_LENGTH) {
+    problems.push(`content length ${content ? content.length : 0} is below floor ${MIN_CONTENT_LENGTH} (likely an incomplete or empty read)`);
+  }
+  return { valid: problems.length === 0, problems };
+}
+
+// ---------------------------------------------------------------------------
+// Extraction from the RSC flight payload
+//
+// The constitution document is delivered as a Sanity object of type
+// "featureClaudeConstitution" embedded in the flight stream. Its prose is a
+// mix of Sanity Portable Text (blocks of spans) and large RSC text blobs
+// (rows of the form `<id>:T<hexlen>,<text>`) that are referenced from span
+// text values as `$<id>`. We parse the rows, locate the constitution document,
+// and walk it — resolving text-blob references and concatenating span text —
+// to reconstruct the complete document deterministically.
+// ---------------------------------------------------------------------------
+
+// Fields of the constitution document that are NOT part of the prose
+// (audio-chapter nav, download buttons, SEO metadata, system fields).
+const NON_CONTENT_FIELDS = new Set([
+  'audiobook', 'downloadCtas', 'meta', 'seo', 'slug', 'language',
+  '_id', '_type', '_rev', '_createdAt', '_updatedAt',
+]);
+// Preferred reading order for the known content fields. Any other (non-excluded)
+// fields are appended afterwards so new content sections are still captured.
+const CONTENT_FIELD_ORDER = ['hero', 'chapters', 'acknowledgements'];
+// Portable Text structural/metadata keys to skip when walking.
+const PT_SKIP_KEYS = new Set([
+  '_key', '_type', '_id', 'marks', 'markDefs', 'style', 'listItem', 'level',
+  'href', 'url', 'className', 'id', 'language', 'alt', 'asset', '_ref',
+]);
+
+/** Concatenate the decoded strings from all `self.__next_f.push([n,"..."])` calls. */
+function extractFlightBuffer(html) {
+  const $ = cheerio.load(html);
+  let flight = '';
+  $('script').each((i, el) => {
+    const t = $(el).text();
+    if (t.includes('self.__next_f.push')) {
+      const m = t.match(/self\.__next_f\.push\(\[\d+,(.*)\]\)/s);
+      if (m) {
+        try { flight += JSON.parse(m[1]); } catch { /* non-string push payload */ }
+      }
+    }
+  });
+  return flight;
+}
+
+/**
+ * Parse the flight buffer into rows. Text-blob rows (`<id>:T<hexlen>,<bytes>`)
+ * are read by their declared byte length (their content may contain newlines);
+ * all other rows run to the next newline. Byte-accurate via Buffer.
+ */
+function parseFlightRows(flight) {
+  const buf = Buffer.from(flight, 'utf8');
+  const rows = [];
+  let p = 0;
+  while (p < buf.length) {
+    const colon = buf.indexOf(0x3a, p); // ':'
+    if (colon < 0) break;
+    const id = buf.toString('utf8', p, colon);
+    if (!/^[0-9a-f]{1,6}$/i.test(id)) { // not a row header; advance to next line
+      const nl = buf.indexOf(0x0a, p);
+      if (nl < 0) break;
+      p = nl + 1;
+      continue;
+    }
+    const q = colon + 1;
+    const type = String.fromCharCode(buf[q]);
+    if (type === 'T') {
+      const comma = buf.indexOf(0x2c, q + 1); // ','
+      const len = parseInt(buf.toString('utf8', q + 1, comma), 16);
+      const text = buf.toString('utf8', comma + 1, comma + 1 + len);
+      rows.push({ id, type: 'T', text });
+      p = comma + 1 + len;
+      if (buf[p] === 0x0a) p++;
+    } else {
+      let nl = buf.indexOf(0x0a, q);
+      if (nl < 0) nl = buf.length;
+      rows.push({ id, type, payload: buf.toString('utf8', q, nl) });
+      p = nl + 1;
+    }
+  }
+  return rows;
+}
+
+/** Recursively find the first object with the given `_type`. */
+function findByType(node, type) {
+  if (node == null || typeof node !== 'object') return null;
+  if (!Array.isArray(node) && node._type === type) return node;
+  for (const v of (Array.isArray(node) ? node : Object.values(node))) {
+    const found = findByType(v, type);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Walk the constitution document, resolving text-blob refs + Portable Text. */
+function renderConstitutionDoc(doc, tBlobs) {
+  const out = [];
+  const pushString = (v) => {
+    const ref = /^\$([0-9a-f]+)$/i.exec(v);
+    if (ref) { // RSC reference to a text blob
+      if (tBlobs.has(ref[1])) out.push(tBlobs.get(ref[1]));
+      return;
+    }
+    if (v.startsWith('$')) return; // other RSC sentinel/component reference
+    out.push(v);
+  };
+  const walk = (v) => {
+    if (v == null) return;
+    if (typeof v === 'string') { pushString(v); return; }
+    if (Array.isArray(v)) {
+      // RSC element: ["$", type, key, props]
+      if (v[0] === '$' && v.length >= 4 && v[3] && typeof v[3] === 'object') { walk(v[3].children); return; }
+      for (const x of v) walk(x);
+      return;
+    }
+    if (typeof v === 'object') {
+      if (v._type === 'span' && typeof v.text === 'string') { pushString(v.text); return; }
+      if (v._type === 'block' && Array.isArray(v.children)) {
+        for (const c of v.children) walk(c);
+        out.push('\n');
+        return;
+      }
+      for (const k of Object.keys(v)) {
+        if (PT_SKIP_KEYS.has(k)) continue;
+        walk(v[k]);
+      }
+    }
+  };
+  const keys = [
+    ...CONTENT_FIELD_ORDER.filter((k) => k in doc),
+    ...Object.keys(doc).filter((k) => !CONTENT_FIELD_ORDER.includes(k) && !NON_CONTENT_FIELDS.has(k)),
+  ];
+  for (const k of keys) walk(doc[k]);
+  return out.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Fetch the constitution page and extract the full document text from the RSC
+ * flight payload. Throws if the page structure is not as expected (so the
+ * caller can retry / skip rather than record an incomplete snapshot).
  */
 export async function fetchConstitution() {
   console.log(`Fetching ${CONSTITUTION_URL}...`);
@@ -31,28 +206,62 @@ export async function fetchConstitution() {
   }
 
   const html = await response.text();
-  const $ = cheerio.load(html);
 
-  // Remove non-content elements
-  $('script, style, nav, header, footer, noscript').remove();
+  const flight = extractFlightBuffer(html);
+  if (!flight) {
+    throw new Error('No RSC flight payload found on page (structure may have changed)');
+  }
+  const rows = parseFlightRows(flight);
+  const tBlobs = new Map();
+  for (const r of rows) if (r.type === 'T') tBlobs.set(r.id, r.text);
 
-  // Get main content
-  const mainContent = $('article').length ? $('article') : ($('main').length ? $('main') : $('body'));
+  const dataRow = rows.find(
+    (r) => (r.type === '[' || r.type === '{') && r.payload.includes('featureClaudeConstitution')
+  );
+  if (!dataRow) {
+    throw new Error('Constitution data not found in flight payload (structure may have changed)');
+  }
+  let doc;
+  try {
+    doc = findByType(JSON.parse(dataRow.payload), 'featureClaudeConstitution');
+  } catch (e) {
+    throw new Error(`Failed to parse constitution data row: ${e.message}`);
+  }
+  if (!doc) {
+    throw new Error('featureClaudeConstitution document not found in flight payload');
+  }
 
-  // Add spaces after block elements to prevent word concatenation
-  mainContent.find('p, div, li, h1, h2, h3, h4, h5, h6, br, td, th, dt, dd, section, article').each(function() {
-    $(this).append(' ');
-  });
-
-  // Extract text
-  let text = mainContent.text();
-
-  // Clean up whitespace - normalize all whitespace to single spaces
-  text = text
-    .replace(/\s+/g, ' ')  // Collapse all whitespace to single space
-    .trim();
-
+  const text = renderConstitutionDoc(doc, tBlobs);
+  if (!text) {
+    throw new Error('Constitution extraction produced empty text');
+  }
   return text;
+}
+
+/**
+ * Fetch the constitution with validation and retries. Never records a partial
+ * or malformed fetch: returns { content: null, problems } if every attempt
+ * fails validation, so the caller can skip the run instead of logging a
+ * spurious change.
+ */
+export async function fetchValidatedConstitution(maxAttempts = 3) {
+  let lastProblems = ['fetch failed'];
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const content = await fetchConstitution();
+      const { valid, problems } = validateConstitutionContent(content);
+      if (valid) return { content };
+      lastProblems = problems;
+      console.warn(`Fetch attempt ${attempt}/${maxAttempts} returned incomplete content: ${problems.join('; ')}`);
+    } catch (err) {
+      lastProblems = [err.message];
+      console.warn(`Fetch attempt ${attempt}/${maxAttempts} failed: ${err.message}`);
+    }
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  return { content: null, problems: lastProblems };
 }
 
 /**
@@ -521,6 +730,42 @@ async function saveVersion(content, timestamp, versionHash) {
 /**
  * Main monitoring function
  */
+let lastRunStatus = null;
+
+/**
+ * Record the outcome of a monitor run to the status file (and memory) so a
+ * paused/failing monitor is observable (via /api/health) instead of silent.
+ * `ok` = we obtained a valid reading this run (whether or not it changed).
+ */
+export async function recordRunStatus(status) {
+  try {
+    const metadata = await loadMetadata();
+    const latest = metadata.versions[metadata.versions.length - 1] || null;
+    lastRunStatus = {
+      lastRunAt: new Date().toISOString(),
+      ok: true,
+      problems: [],
+      error: null,
+      ...status,
+      latestVersion: latest ? { hash: latest.hash, timestamp: latest.timestamp } : null,
+    };
+    await fs.writeFile(STATUS_FILE, JSON.stringify(lastRunStatus, null, 2));
+  } catch (e) {
+    console.error('Could not write monitor status:', e.message);
+  }
+  return lastRunStatus;
+}
+
+/** Read the last run status (memory, falling back to the status file). */
+export async function getRunStatus() {
+  if (lastRunStatus) return lastRunStatus;
+  try {
+    return JSON.parse(await fs.readFile(STATUS_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
 export async function runMonitor() {
   console.log('='.repeat(60));
   console.log('Constitution Monitor');
@@ -528,16 +773,25 @@ export async function runMonitor() {
 
   await fs.mkdir(VERSIONS_DIR, { recursive: true });
 
-  // Fetch current content
-  const currentContent = await fetchConstitution();
+  const previousContent = await getLatestVersion();
+
+  // Fetch current content WITH validation + retries. A partial or malformed
+  // fetch must never be recorded as a change (this is what produced the false
+  // "entire constitution removed" alarm). If we can't get a complete copy, we
+  // skip this run rather than logging a spurious diff.
+  const { content: currentContent, problems } = await fetchValidatedConstitution();
+  if (!currentContent) {
+    console.error('Aborting run: could not obtain a complete, valid copy of the constitution.');
+    console.error(`No version recorded. Problems: ${(problems || []).join('; ')}`);
+    await recordRunStatus({ ok: false, result: 'incomplete-fetch', problems: problems || [] });
+    return { changed: false, error: 'incomplete-fetch', problems: problems || [] };
+  }
+
   const currentHash = getContentHash(currentContent);
   const timestamp = new Date().toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
 
   console.log(`Fetched content, hash: ${currentHash}`);
   console.log(`Timestamp: ${timestamp}`);
-
-  // Get previous version
-  const previousContent = await getLatestVersion();
 
   if (!previousContent) {
     console.log('\nFirst run - saving initial version');
@@ -565,6 +819,7 @@ Initial snapshot captured. Future changes will be logged here.
 `;
     await fs.writeFile(CHANGELOG_FILE, initialChangelog);
 
+    await recordRunStatus({ ok: true, result: 'initial' });
     return { changed: false, initial: true, hash: currentHash };
   }
 
@@ -572,6 +827,7 @@ Initial snapshot captured. Future changes will be logged here.
 
   if (currentHash === previousHash) {
     console.log('\nNo changes detected.');
+    await recordRunStatus({ ok: true, result: 'no-change' });
     return { changed: false, hash: currentHash };
   }
 
@@ -613,6 +869,7 @@ Initial snapshot captured. Future changes will be logged here.
 
   console.log('\nDone! Check CHANGELOG.md for details.');
 
+  await recordRunStatus({ ok: true, result: 'changed' });
   return {
     changed: true,
     hash: currentHash,
@@ -637,7 +894,10 @@ export async function getChangelog() {
  */
 export async function getVersions() {
   const metadata = await loadMetadata();
-  return metadata.versions;
+  return metadata.versions.map((v) => {
+    const correction = getCorrection(v.hash);
+    return correction ? { ...v, correction } : v;
+  });
 }
 
 /**
@@ -667,7 +927,10 @@ export async function getDiff(hash) {
 
   if (versionIndex === -1) return null;
 
-  const version = metadata.versions[versionIndex];
+  const baseVersion = metadata.versions[versionIndex];
+  const correction = getCorrection(baseVersion.hash);
+  // Spread correction into `version` so it rides along with every return below.
+  const version = correction ? { ...baseVersion, correction } : baseVersion;
 
   // Try to find the diff file
   const diffFileName = version.file.replace('.txt', '.diff');
